@@ -141,4 +141,55 @@ struct ElementInspectorPromptBuilderTests {
     let prompt = ElementInspectorPromptBuilder.buildContextPrompt(element: element)
     #expect(prompt.contains("**Element**: div"))
   }
+
+  @Test func multiElementPromptIncludesNumberedSections() {
+    let elements = [
+      TestFixtures.makeButton(
+        outerHTML: "<button>Launch</button>",
+        cssSelector: ".hero button",
+        computedStyles: ["color": "white"]
+      ),
+      TestFixtures.makeButton(
+        tagName: "SECTION",
+        outerHTML: "<section class=\"pricing\"></section>",
+        cssSelector: ".pricing",
+        computedStyles: ["backgroundColor": "black"]
+      ),
+    ]
+
+    let prompt = ElementInspectorPromptBuilder.buildPrompt(
+      elements: elements,
+      instruction: "Make these feel like one component"
+    )
+
+    #expect(prompt.contains("### Element 1"))
+    #expect(prompt.contains("### Element 2"))
+    #expect(prompt.contains(".hero button"))
+    #expect(prompt.contains(".pricing"))
+    #expect(prompt.contains("User request: Make these feel like one component"))
+  }
+
+  @Test func multiElementContextPromptIncludesNumberedSections() {
+    let elements = [
+      TestFixtures.makeButton(
+        outerHTML: "<button>Launch</button>",
+        cssSelector: ".hero button",
+        computedStyles: ["color": "white"]
+      ),
+      TestFixtures.makeButton(
+        tagName: "SECTION",
+        outerHTML: "<section class=\"pricing\"></section>",
+        cssSelector: ".pricing",
+        computedStyles: ["backgroundColor": "black"]
+      ),
+    ]
+
+    let prompt = ElementInspectorPromptBuilder.buildContextPrompt(elements: elements)
+
+    #expect(prompt.contains("### Element 1"))
+    #expect(prompt.contains("### Element 2"))
+    #expect(prompt.contains(".hero button"))
+    #expect(prompt.contains(".pricing"))
+    #expect(!prompt.contains("User request"))
+  }
 }
