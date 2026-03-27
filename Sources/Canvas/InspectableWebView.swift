@@ -30,6 +30,8 @@ public struct InspectableWebView: NSViewRepresentable {
   public var reloadToken: UUID? = nil
   /// Called when the user clicks an element in inspect mode
   public var onElementSelected: ((ElementInspectorData) -> Void)?
+  /// Called when the selected element's viewport rect changes due to scrolling or resizing.
+  public var onSelectedElementViewportRectChange: ((CGRect) -> Void)?
   /// Binding controlling whether the JS inspector overlay is active
   public var isInspectModeActive: Binding<Bool>?
   /// ID of the currently selected element; nil means no selection (clears JS lock)
@@ -44,6 +46,7 @@ public struct InspectableWebView: NSViewRepresentable {
     onError: ((String) -> Void)? = nil,
     reloadToken: UUID? = nil,
     onElementSelected: ((ElementInspectorData) -> Void)? = nil,
+    onSelectedElementViewportRectChange: ((CGRect) -> Void)? = nil,
     isInspectModeActive: Binding<Bool>? = nil,
     selectedElementId: UUID? = nil
   ) {
@@ -55,6 +58,7 @@ public struct InspectableWebView: NSViewRepresentable {
     self.onError = onError
     self.reloadToken = reloadToken
     self.onElementSelected = onElementSelected
+    self.onSelectedElementViewportRectChange = onSelectedElementViewportRectChange
     self.isInspectModeActive = isInspectModeActive
     self.selectedElementId = selectedElementId
   }
@@ -182,6 +186,14 @@ public struct InspectableWebView: NSViewRepresentable {
         message.name == ElementInspectorBridge.messageName,
         let body = message.body as? [String: Any]
       else { return }
+
+      if let messageType = body["type"] as? String, messageType == "selectionRect" {
+        let rect = ElementInspectorBridge.parseSelectionRect(body)
+        Task { @MainActor in
+          parent.onSelectedElementViewportRectChange?(rect)
+        }
+        return
+      }
 
       Task { @MainActor in
         let element = ElementInspectorBridge.parseElementData(body)

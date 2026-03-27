@@ -1,3 +1,4 @@
+import CoreGraphics
 import Testing
 @testable import Canvas
 
@@ -15,6 +16,11 @@ struct ElementInspectStateTests {
   @Test func initialStateHasNoSelectedElement() {
     let state = ElementInspectState()
     #expect(state.selectedElement == nil)
+  }
+
+  @Test func initialStateHasNoViewportRect() {
+    let state = ElementInspectState()
+    #expect(state.selectedElementViewportRect == nil)
   }
 
   @Test func initialStateIsInputShowingIsFalse() {
@@ -35,6 +41,7 @@ struct ElementInspectStateTests {
     state.selectElement(TestFixtures.makeButton())
     state.activate()
     #expect(state.selectedElement == nil)
+    #expect(state.selectedElementViewportRect == nil)
     #expect(state.isInputShowing == false)
   }
 
@@ -45,6 +52,7 @@ struct ElementInspectStateTests {
     let element = TestFixtures.makeButton()
     state.selectElement(element)
     #expect(state.selectedElement == element)
+    #expect(state.selectedElementViewportRect == element.boundingRect)
   }
 
   @Test func selectElementMakesInputShowing() {
@@ -61,6 +69,7 @@ struct ElementInspectStateTests {
     state.selectElement(TestFixtures.makeButton())
     state.dismissInput()
     #expect(state.selectedElement == nil)
+    #expect(state.selectedElementViewportRect == nil)
     #expect(state.isInputShowing == false)
   }
 
@@ -87,6 +96,20 @@ struct ElementInspectStateTests {
     state.selectElement(TestFixtures.makeButton())
     state.deactivate()
     #expect(state.selectedElement == nil)
+    #expect(state.selectedElementViewportRect == nil)
+  }
+
+  @Test func updateSelectedElementViewportRectOnlyTouchesGeometry() {
+    let state = ElementInspectState()
+    let element = TestFixtures.makeButton()
+    let updatedRect = CGRect(x: 44, y: 88, width: 160, height: 52)
+
+    state.selectElement(element)
+    state.updateSelectedElementViewportRect(updatedRect)
+
+    #expect(state.selectedElement == element)
+    #expect(state.selectedElement?.id == element.id)
+    #expect(state.selectedElementViewportRect == updatedRect)
   }
 
   // MARK: - Lifecycle & Edge Cases

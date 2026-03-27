@@ -47,6 +47,20 @@ struct ElementInspectorBridgeParsingTests {
     #expect(data.boundingRect == CGRect(x: 5, y: 0, width: 0, height: 30))
   }
 
+  @Test func parsesSelectionRectMessage() {
+    let rect = ElementInspectorBridge.parseSelectionRect([
+      "type": "selectionRect",
+      "boundingRect": ["x": 9.0, "y": 11.0, "width": 120.0, "height": 32.0],
+    ])
+
+    #expect(rect == CGRect(x: 9, y: 11, width: 120, height: 32))
+  }
+
+  @Test func missingSelectionRectDefaultsToZero() {
+    let rect = ElementInspectorBridge.parseSelectionRect(["type": "selectionRect"])
+    #expect(rect == .zero)
+  }
+
   @Test func missingComputedStylesDefaultsToEmptyDict() {
     let data = ElementInspectorBridge.parseElementData([:])
     #expect(data.computedStyles.isEmpty)

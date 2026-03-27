@@ -26,11 +26,12 @@ import SwiftUI
 /// ```
 struct WebInspectorOverlayModifier: ViewModifier {
   @Bindable var state: ElementInspectState
+  let inputPlacement: WebInspectInputPlacement
   let onSubmit: ((ElementInspectorData, String) -> Void)?
   let onContextSelection: ((ElementInspectorData) -> Void)?
 
   func body(content: Content) -> some View {
-    ZStack(alignment: .bottom) {
+    ZStack {
       content
 
       // Top banner
@@ -64,20 +65,15 @@ struct WebInspectorOverlayModifier: ViewModifier {
         .transition(.opacity.combined(with: .move(edge: .top)))
       }
 
-      // Bottom overlay — branched by mode
+      // Input/context overlay
       if let element = state.selectedElement {
         Group {
           switch state.mode {
           case .input:
-            WebInspectInputView(
-              element: element,
-              onSubmit: { instruction in
-                onSubmit?(element, instruction)
-                state.deactivate()
-              },
-              onDismiss: {
-                state.dismissInput()
-              }
+            WebInspectInputOverlay(
+              state: state,
+              placement: inputPlacement,
+              onSubmit: onSubmit
             )
 
           case .context:
@@ -87,9 +83,10 @@ struct WebInspectorOverlayModifier: ViewModifier {
                 state.deactivate()
               }
             )
+            .padding(12)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
           }
         }
-        .padding(12)
         .transition(.opacity.combined(with: .move(edge: .bottom)))
       }
     }
@@ -112,15 +109,18 @@ public extension View {
   ///
   /// - Parameters:
   ///   - state: The shared `ElementInspectState` controlling the inspector lifecycle.
+  ///   - inputPlacement: Controls where the inspect input editor is placed in input mode.
   ///   - onSubmit: Called with the selected element and the user's instruction when they press Enter (input mode).
   ///   - onContextSelection: Called with the selected element immediately on click (context mode).
   func webInspectorOverlay(
     state: ElementInspectState,
+    inputPlacement: WebInspectInputPlacement = .bottom,
     onSubmit: ((ElementInspectorData, String) -> Void)? = nil,
     onContextSelection: ((ElementInspectorData) -> Void)? = nil
   ) -> some View {
     modifier(WebInspectorOverlayModifier(
       state: state,
+      inputPlacement: inputPlacement,
       onSubmit: onSubmit,
       onContextSelection: onContextSelection
     ))

@@ -29,6 +29,9 @@ public final class ElementInspectState {
   /// The element the user clicked; non-nil when the input overlay should show
   public var selectedElement: ElementInspectorData?
 
+  /// The selected element's live bounding rect in viewport coordinates.
+  public var selectedElementViewportRect: CGRect?
+
   /// Whether the instruction input overlay is visible
   public var isInputShowing: Bool { selectedElement != nil }
 
@@ -41,22 +44,34 @@ public final class ElementInspectState {
   public func activate(mode: InspectMode = .input) {
     self.mode = mode
     isActive = true
-    selectedElement = nil
+    clearSelection()
   }
 
   /// Deactivates inspect mode and clears any selected element.
   public func deactivate() {
     isActive = false
-    selectedElement = nil
+    clearSelection()
   }
 
   /// Records the clicked element and shows the input overlay.
   public func selectElement(_ element: ElementInspectorData) {
     selectedElement = element
+    selectedElementViewportRect = element.boundingRect
+  }
+
+  /// Updates the selected element's viewport rect without replacing the selection.
+  public func updateSelectedElementViewportRect(_ rect: CGRect) {
+    guard selectedElement != nil else { return }
+    selectedElementViewportRect = rect
   }
 
   /// Dismisses the input overlay without deactivating inspect mode.
   public func dismissInput() {
+    clearSelection()
+  }
+
+  private func clearSelection() {
     selectedElement = nil
+    selectedElementViewportRect = nil
   }
 }
