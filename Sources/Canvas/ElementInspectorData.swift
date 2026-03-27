@@ -24,7 +24,7 @@ public struct ElementInspectorData: Identifiable, Equatable, Sendable {
   public let cssSelector: String
   /// Key computed styles: color, background-color, font-size, etc.
   public let computedStyles: [String: String]
-  /// Element bounding rect in page coordinates
+  /// Element bounding rect in viewport coordinates (`getBoundingClientRect()`).
   public let boundingRect: CGRect
 
   public init(

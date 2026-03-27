@@ -23,13 +23,15 @@ public struct InspectableWebView: NSViewRepresentable {
   public let isFileURL: Bool
   /// Directory to grant read access for file URLs (typically the project root)
   public let allowingReadAccessTo: URL?
-  @Binding public var isLoading: Bool
-  @Binding public var currentURL: URL?
+  public var onLoadingChange: ((Bool) -> Void)?
+  public var onURLChange: ((URL?) -> Void)?
   public let onError: ((String) -> Void)?
   /// Change this token to force a reload (useful for file:// URLs that don't change path)
   public var reloadToken: UUID? = nil
   /// Called when the user clicks an element in inspect mode
   public var onElementSelected: ((ElementInspectorData) -> Void)?
+  /// Called when the selected element's viewport rect changes due to scrolling or resizing.
+  public var onSelectedElementViewportRectChange: ((CGRect) -> Void)?
   /// Binding controlling whether the JS inspector overlay is active
   public var isInspectModeActive: Binding<Bool>?
   /// ID of the currently selected element; nil means no selection (clears JS lock)
@@ -39,22 +41,24 @@ public struct InspectableWebView: NSViewRepresentable {
     url: URL,
     isFileURL: Bool,
     allowingReadAccessTo: URL? = nil,
-    isLoading: Binding<Bool>,
-    currentURL: Binding<URL?>,
+    onLoadingChange: ((Bool) -> Void)? = nil,
+    onURLChange: ((URL?) -> Void)? = nil,
     onError: ((String) -> Void)? = nil,
     reloadToken: UUID? = nil,
     onElementSelected: ((ElementInspectorData) -> Void)? = nil,
+    onSelectedElementViewportRectChange: ((CGRect) -> Void)? = nil,
     isInspectModeActive: Binding<Bool>? = nil,
     selectedElementId: UUID? = nil
   ) {
     self.url = url
     self.isFileURL = isFileURL
     self.allowingReadAccessTo = allowingReadAccessTo
-    self._isLoading = isLoading
-    self._currentURL = currentURL
+    self.onLoadingChange = onLoadingChange
+    self.onURLChange = onURLChange
     self.onError = onError
     self.reloadToken = reloadToken
     self.onElementSelected = onElementSelected
+    self.onSelectedElementViewportRectChange = onSelectedElementViewportRectChange
     self.isInspectModeActive = isInspectModeActive
     self.selectedElementId = selectedElementId
   }
@@ -142,14 +146,14 @@ public struct InspectableWebView: NSViewRepresentable {
 
     public func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
       Task { @MainActor in
-        parent.isLoading = true
+        parent.onLoadingChange?(true)
       }
     }
 
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
       Task { @MainActor in
-        parent.isLoading = false
-        parent.currentURL = webView.url
+        parent.onLoadingChange?(false)
+        parent.onURLChange?(webView.url)
         lastLoadedURL = parent.url
       }
       // Re-activate inspector after HMR/page reload if still active
@@ -160,14 +164,14 @@ public struct InspectableWebView: NSViewRepresentable {
 
     public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
       Task { @MainActor in
-        parent.isLoading = false
+        parent.onLoadingChange?(false)
         parent.onError?(error.localizedDescription)
       }
     }
 
     public func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
       Task { @MainActor in
-        parent.isLoading = false
+        parent.onLoadingChange?(false)
         parent.onError?(error.localizedDescription)
       }
     }
@@ -182,6 +186,14 @@ public struct InspectableWebView: NSViewRepresentable {
         message.name == ElementInspectorBridge.messageName,
         let body = message.body as? [String: Any]
       else { return }
+
+      if let messageType = body["type"] as? String, messageType == "selectionRect" {
+        let rect = ElementInspectorBridge.parseSelectionRect(body)
+        Task { @MainActor in
+          parent.onSelectedElementViewportRectChange?(rect)
+        }
+        return
+      }
 
       Task { @MainActor in
         let element = ElementInspectorBridge.parseElementData(body)

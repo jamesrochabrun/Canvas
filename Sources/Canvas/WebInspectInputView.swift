@@ -106,27 +106,16 @@ public struct WebInspectInputView: View {
   }
 
   private var textEditorView: some View {
-    ZStack(alignment: .leading) {
-      TextEditor(text: $text)
-        .scrollContentBackground(.hidden)
-        .focused($isFocused)
-        .font(.system(size: 13))
-        .frame(minHeight: 32, maxHeight: 60)
-        .fixedSize(horizontal: false, vertical: true)
-        .padding(6)
-        .onKeyPress { key in
-          handleKeyPress(key)
-        }
-        .padding(.top, 8)
-
-      if text.isEmpty {
-        Text("Describe the change...")
-          .font(.system(size: 13))
-          .foregroundColor(.secondary)
-          .padding(.leading, 11)
-          .allowsHitTesting(false)
+    TextField("Describe the change...", text: $text, axis: .vertical)
+      .textFieldStyle(.plain)
+      .focused($isFocused)
+      .font(.system(size: 13))
+      .lineLimit(1...3)
+      .padding(.horizontal, 11)
+      .padding(.vertical, 10)
+      .onKeyPress { key in
+        handleKeyPress(key)
       }
-    }
     .background(
       RoundedRectangle(cornerRadius: 8)
         .fill(Color(NSColor.textBackgroundColor))

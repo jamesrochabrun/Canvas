@@ -59,11 +59,7 @@ public enum ElementInspectorBridge {
   /// Parses the dictionary sent from JS `postMessage` into an `ElementInspectorData`.
   public static func parseElementData(_ body: [String: Any]) -> ElementInspectorData {
     let styles = body["computedStyles"] as? [String: String] ?? [:]
-    let rectDict = body["boundingRect"] as? [String: Double] ?? [:]
-    let rect = CGRect(
-      x: rectDict["x"] ?? 0, y: rectDict["y"] ?? 0,
-      width: rectDict["width"] ?? 0, height: rectDict["height"] ?? 0
-    )
+    let rect = parseRect(from: body)
     return ElementInspectorData(
       id: UUID(),
       tagName: body["tagName"] as? String ?? "",
@@ -75,6 +71,11 @@ public enum ElementInspectorBridge {
       computedStyles: styles,
       boundingRect: rect
     )
+  }
+
+  /// Parses the selected element's latest viewport rect from a rect-only message.
+  public static func parseSelectionRect(_ body: [String: Any]) -> CGRect {
+    parseRect(from: body)
   }
 
   /// Activates the inspector overlay in the web view.
@@ -101,6 +102,7 @@ public enum ElementInspectorBridge {
       var currentTarget = null;
       var selectedElement = null;
       var isActive = false;
+      var selectionRectFrame = null;
 
       function buildCSSSelector(el) {
         var parts = [];
@@ -134,7 +136,6 @@ public enum ElementInspectorBridge {
 
       function captureElementData(el) {
         var styles = window.getComputedStyle(el);
-        var rect = el.getBoundingClientRect();
         var styleKeys = ['color','backgroundColor','fontSize','fontWeight','padding','margin','display','borderRadius','width','height'];
         var computedStyles = {};
         styleKeys.forEach(function(k) { computedStyles[k] = styles[k] || ''; });
@@ -148,8 +149,13 @@ public enum ElementInspectorBridge {
           outerHTML: html,
           cssSelector: buildCSSSelector(el),
           computedStyles: computedStyles,
-          boundingRect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+          boundingRect: captureBoundingRect(el)
         };
+      }
+
+      function captureBoundingRect(el) {
+        var rect = el.getBoundingClientRect();
+        return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
       }
 
       function createOverlay() {
@@ -201,12 +207,42 @@ public enum ElementInspectorBridge {
       }
 
       function clearSelection() {
+        if (selectionRectFrame !== null) {
+          window.cancelAnimationFrame(selectionRectFrame);
+          selectionRectFrame = null;
+        }
         selectedElement = null;
         if (currentTarget) highlightElement(currentTarget);
       }
 
+      function postSelectedRect() {
+        if (!selectedElement) return;
+        try {
+          window.webkit.messageHandlers.elementInspector.postMessage({
+            type: 'selectionRect',
+            boundingRect: captureBoundingRect(selectedElement)
+          });
+        } catch(err) {}
+      }
+
+      function scheduleSelectedRectPost() {
+        if (!selectedElement || selectionRectFrame !== null) return;
+        selectionRectFrame = window.requestAnimationFrame(function() {
+          selectionRectFrame = null;
+          postSelectedRect();
+        });
+      }
+
       function onScroll() {
-        if (selectedElement) highlightElement(selectedElement);
+        if (!selectedElement) return;
+        highlightElement(selectedElement);
+        scheduleSelectedRectPost();
+      }
+
+      function onResize() {
+        if (!selectedElement) return;
+        highlightElement(selectedElement);
+        scheduleSelectedRectPost();
       }
 
       function activate() {
@@ -216,6 +252,7 @@ public enum ElementInspectorBridge {
         document.addEventListener('mousemove', onMouseMove, true);
         document.addEventListener('click', onClick, true);
         window.addEventListener('scroll', onScroll, { capture: true, passive: true });
+        window.addEventListener('resize', onResize, { passive: true });
         document.body.style.cursor = 'crosshair';
       }
 
@@ -225,9 +262,14 @@ public enum ElementInspectorBridge {
         document.removeEventListener('mousemove', onMouseMove, true);
         document.removeEventListener('click', onClick, true);
         window.removeEventListener('scroll', onScroll, true);
+        window.removeEventListener('resize', onResize);
         document.body.style.cursor = '';
         if (overlay) {
           overlay.style.display = 'none';
+        }
+        if (selectionRectFrame !== null) {
+          window.cancelAnimationFrame(selectionRectFrame);
+          selectionRectFrame = null;
         }
         currentTarget = null;
         selectedElement = null;
@@ -236,4 +278,14 @@ public enum ElementInspectorBridge {
       window.__elementInspector = { activate: activate, deactivate: deactivate, clearSelection: clearSelection };
     })();
     """
+
+  private static func parseRect(from body: [String: Any]) -> CGRect {
+    let rectDict = body["boundingRect"] as? [String: Double] ?? [:]
+    return CGRect(
+      x: rectDict["x"] ?? 0,
+      y: rectDict["y"] ?? 0,
+      width: rectDict["width"] ?? 0,
+      height: rectDict["height"] ?? 0
+    )
+  }
 }
