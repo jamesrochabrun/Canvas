@@ -41,16 +41,14 @@ struct ElementInspectorPromptBuilderTests {
     let element = TestFixtures.makeButton(
       computedStyles: [
         "color": "red",
-        "font-family": "Arial",
-        "z-index": "10",
-        "opacity": "0.5",
+        "cursor": "pointer",
+        "pointerEvents": "auto",
       ]
     )
     let prompt = ElementInspectorPromptBuilder.buildPrompt(element: element, instruction: "test")
     #expect(prompt.contains("color: red"))
-    #expect(!prompt.contains("font-family"))
-    #expect(!prompt.contains("z-index"))
-    #expect(!prompt.contains("opacity"))
+    #expect(!prompt.contains("cursor"))
+    #expect(!prompt.contains("pointerEvents"))
   }
 
   @Test func excludesStylesWithEmptyValues() {
@@ -79,13 +77,13 @@ struct ElementInspectorPromptBuilderTests {
       computedStyles: [
         "backgroundColor": "green",
         "fontSize": "18px",
-        "borderRadius": "4px",
+        "borderTopLeftRadius": "4px",
       ]
     )
     let prompt = ElementInspectorPromptBuilder.buildPrompt(element: element, instruction: "test")
     #expect(prompt.contains("  backgroundColor: green"))
     #expect(prompt.contains("  fontSize: 18px"))
-    #expect(prompt.contains("  borderRadius: 4px"))
+    #expect(prompt.contains("  borderTopLeftRadius: 4px"))
   }
 
   @Test func correctLineOrdering() {

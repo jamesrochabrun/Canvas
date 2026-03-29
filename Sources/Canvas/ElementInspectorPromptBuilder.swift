@@ -11,8 +11,25 @@ import Foundation
 /// Builds a structured prompt from inspected element data and a user instruction.
 public enum ElementInspectorPromptBuilder {
   private static let relevantStyles = [
-    "background-color", "backgroundColor", "color", "font-size", "fontSize",
-    "padding", "border-radius", "borderRadius", "width", "height", "display",
+    "color", "backgroundColor", "opacity",
+    "fontFamily", "fontSize", "fontWeight", "fontStyle",
+    "textAlign", "textDecoration", "textTransform", "letterSpacing",
+    "lineHeight", "whiteSpace", "textShadow",
+    "width", "height", "minWidth", "maxWidth", "minHeight", "maxHeight",
+    "display", "position", "zIndex",
+    "flexDirection", "flexWrap", "justifyContent", "alignItems", "alignSelf", "gap",
+    "gridTemplateColumns", "gridTemplateRows",
+    "paddingTop", "paddingRight", "paddingBottom", "paddingLeft",
+    "marginTop", "marginRight", "marginBottom", "marginLeft",
+    "borderTopWidth", "borderTopColor", "borderTopStyle",
+    "borderRightWidth", "borderRightColor", "borderRightStyle",
+    "borderBottomWidth", "borderBottomColor", "borderBottomStyle",
+    "borderLeftWidth", "borderLeftColor", "borderLeftStyle",
+    "borderTopLeftRadius", "borderTopRightRadius",
+    "borderBottomRightRadius", "borderBottomLeftRadius",
+    "backgroundImage", "backgroundSize", "backgroundPosition",
+    "boxShadow", "overflow",
+    "transform", "objectFit", "filter", "backdropFilter",
   ]
 
   /// Constructs the prompt string sent to the terminal session.
@@ -119,6 +136,15 @@ public enum ElementInspectorPromptBuilder {
     if !presentStyles.isEmpty {
       lines.append("**Computed Styles**:")
       lines.append(contentsOf: presentStyles)
+    }
+
+    if !element.parentTagName.isEmpty {
+      let parentStyleEntries = element.parentStyles.compactMap { key, value -> String? in
+        guard !value.isEmpty else { return nil }
+        return "  \(key): \(value)"
+      }.sorted()
+      lines.append("**Parent** (\(element.parentTagName.lowercased())):")
+      lines.append(contentsOf: parentStyleEntries)
     }
 
     return lines

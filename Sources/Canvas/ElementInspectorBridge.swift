@@ -60,6 +60,9 @@ public enum ElementInspectorBridge {
   public static func parseElementData(_ body: [String: Any]) -> ElementInspectorData {
     let styles = body["computedStyles"] as? [String: String] ?? [:]
     let rect = parseRect(from: body)
+    let parentContext = body["parentContext"] as? [String: Any]
+    let parentTagName = parentContext?["tagName"] as? String ?? ""
+    let parentStyles = parentContext?["styles"] as? [String: String] ?? [:]
     return ElementInspectorData(
       id: UUID(),
       tagName: body["tagName"] as? String ?? "",
@@ -69,7 +72,9 @@ public enum ElementInspectorBridge {
       outerHTML: body["outerHTML"] as? String ?? "",
       cssSelector: body["cssSelector"] as? String ?? "",
       computedStyles: styles,
-      boundingRect: rect
+      boundingRect: rect,
+      parentTagName: parentTagName,
+      parentStyles: parentStyles
     )
   }
 
@@ -137,11 +142,53 @@ public enum ElementInspectorBridge {
 
       function captureElementData(el) {
         var styles = window.getComputedStyle(el);
-        var styleKeys = ['color','backgroundColor','fontSize','fontWeight','padding','margin','display','borderRadius','width','height'];
+        var styleKeys = [
+          'color','backgroundColor','opacity','visibility',
+          'fontFamily','fontSize','fontWeight','fontStyle','fontVariant',
+          'textAlign','textDecoration','textTransform','letterSpacing',
+          'lineHeight','wordSpacing','whiteSpace','textOverflow','textIndent',
+          'textShadow',
+          'width','height','minWidth','maxWidth','minHeight','maxHeight',
+          'boxSizing',
+          'display','position','top','right','bottom','left','zIndex',
+          'flexDirection','flexWrap','justifyContent','alignItems','alignSelf',
+          'alignContent','flexGrow','flexShrink','flexBasis','order','gap',
+          'gridTemplateColumns','gridTemplateRows','gridColumn','gridRow',
+          'paddingTop','paddingRight','paddingBottom','paddingLeft',
+          'marginTop','marginRight','marginBottom','marginLeft',
+          'borderTopWidth','borderRightWidth','borderBottomWidth','borderLeftWidth',
+          'borderTopColor','borderRightColor','borderBottomColor','borderLeftColor',
+          'borderTopStyle','borderRightStyle','borderBottomStyle','borderLeftStyle',
+          'borderTopLeftRadius','borderTopRightRadius',
+          'borderBottomRightRadius','borderBottomLeftRadius',
+          'borderRadius',
+          'backgroundImage','backgroundSize','backgroundPosition','backgroundRepeat',
+          'boxShadow','outline','outlineOffset',
+          'overflow','overflowX','overflowY',
+          'transform','transformOrigin',
+          'transition',
+          'cursor','pointerEvents',
+          'objectFit','objectPosition',
+          'filter','backdropFilter','mixBlendMode','clipPath',
+          'listStyleType','verticalAlign'
+        ];
         var computedStyles = {};
         styleKeys.forEach(function(k) { computedStyles[k] = styles[k] || ''; });
-        var text = (el.textContent || '').trim().slice(0, 100);
-        var html = (el.outerHTML || '').slice(0, 500);
+        var text = (el.textContent || '').trim();
+        var html = (el.outerHTML || '');
+        var parentEl = el.parentElement;
+        var parentData = null;
+        if (parentEl && parentEl !== document.body && parentEl !== document.documentElement) {
+          var ps = window.getComputedStyle(parentEl);
+          var parentKeys = [
+            'display','flexDirection','flexWrap','justifyContent',
+            'alignItems','alignContent','gap','gridTemplateColumns',
+            'gridTemplateRows','position','overflow'
+          ];
+          var parentStyles = {};
+          parentKeys.forEach(function(k) { parentStyles[k] = ps[k] || ''; });
+          parentData = { tagName: parentEl.tagName, styles: parentStyles };
+        }
         return {
           tagName: el.tagName,
           elementId: el.id || '',
@@ -150,7 +197,8 @@ public enum ElementInspectorBridge {
           outerHTML: html,
           cssSelector: buildCSSSelector(el),
           computedStyles: computedStyles,
-          boundingRect: captureBoundingRect(el)
+          boundingRect: captureBoundingRect(el),
+          parentContext: parentData
         };
       }
 

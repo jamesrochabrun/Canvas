@@ -16,16 +16,20 @@ public struct ElementInspectorData: Identifiable, Equatable, Sendable {
   public let elementId: String
   /// `class` attribute string (may be empty)
   public let className: String
-  /// Visible text content, truncated to ~100 chars
+  /// Visible text content
   public let textContent: String
-  /// Outer HTML markup, truncated to ~500 chars
+  /// Outer HTML markup
   public let outerHTML: String
   /// Unique CSS selector path, e.g. `.form > button.primary`
   public let cssSelector: String
-  /// Key computed styles: color, background-color, font-size, etc.
+  /// Computed styles captured from `getComputedStyle()`.
   public let computedStyles: [String: String]
   /// Element bounding rect in viewport coordinates (`getBoundingClientRect()`).
   public let boundingRect: CGRect
+  /// Parent element tag name (empty when parent is `<body>` or absent).
+  public let parentTagName: String
+  /// Parent element's layout-relevant computed styles (display, flex, grid, etc.).
+  public let parentStyles: [String: String]
 
   public init(
     id: UUID = UUID(),
@@ -36,7 +40,9 @@ public struct ElementInspectorData: Identifiable, Equatable, Sendable {
     outerHTML: String,
     cssSelector: String,
     computedStyles: [String: String],
-    boundingRect: CGRect
+    boundingRect: CGRect,
+    parentTagName: String = "",
+    parentStyles: [String: String] = [:]
   ) {
     self.id = id
     self.tagName = tagName
@@ -47,5 +53,7 @@ public struct ElementInspectorData: Identifiable, Equatable, Sendable {
     self.cssSelector = cssSelector
     self.computedStyles = computedStyles
     self.boundingRect = boundingRect
+    self.parentTagName = parentTagName
+    self.parentStyles = parentStyles
   }
 }

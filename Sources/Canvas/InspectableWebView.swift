@@ -36,6 +36,9 @@ public struct InspectableWebView: NSViewRepresentable {
   public var isInspectModeActive: Binding<Bool>?
   /// ID of the currently selected element; nil means no selection (clears JS lock)
   public var selectedElementId: UUID? = nil
+  /// Called once when the underlying `WKWebView` is created.
+  /// Store a weak reference to use with `ElementSnapshotCapture`.
+  public var onWebViewReady: ((WKWebView) -> Void)?
 
   public init(
     url: URL,
@@ -48,7 +51,8 @@ public struct InspectableWebView: NSViewRepresentable {
     onElementSelected: ((ElementInspectorData) -> Void)? = nil,
     onSelectedElementViewportRectChange: ((CGRect) -> Void)? = nil,
     isInspectModeActive: Binding<Bool>? = nil,
-    selectedElementId: UUID? = nil
+    selectedElementId: UUID? = nil,
+    onWebViewReady: ((WKWebView) -> Void)? = nil
   ) {
     self.url = url
     self.isFileURL = isFileURL
@@ -61,6 +65,7 @@ public struct InspectableWebView: NSViewRepresentable {
     self.onSelectedElementViewportRectChange = onSelectedElementViewportRectChange
     self.isInspectModeActive = isInspectModeActive
     self.selectedElementId = selectedElementId
+    self.onWebViewReady = onWebViewReady
   }
 
   public func makeNSView(context: Context) -> WKWebView {
@@ -82,6 +87,7 @@ public struct InspectableWebView: NSViewRepresentable {
     webView.allowsBackForwardNavigationGestures = true
 
     context.coordinator.webView = webView
+    onWebViewReady?(webView)
     loadContent(in: webView)
     return webView
   }

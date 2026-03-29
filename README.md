@@ -159,6 +159,101 @@ let context = ElementInspectorPromptBuilder.buildContextPrompt(
 //   fontSize: 16px
 ```
 
+## Element Snapshots
+
+`ElementSnapshotCapture` captures a cropped screenshot of any element's bounding rect from the `WKWebView`. It's a standalone utility — use it to send visual context to an AI model, or to verify a design change looks correct after the AI edits code.
+
+No permissions or plist entries required.
+
+### 1. Get the WKWebView reference
+
+Use the `onWebViewReady` callback on `InspectableWebView`:
+
+```swift
+@State private var inspectState = ElementInspectState()
+@State private weak var webView: WKWebView?
+
+InspectableWebView(
+  url: URL(string: "https://example.com")!,
+  isFileURL: false,
+  onElementSelected: { element in
+    inspectState.selectElement(element)
+  },
+  isInspectModeActive: .init(
+    get: { inspectState.isActive },
+    set: { _ in }
+  ),
+  onWebViewReady: { self.webView = $0 }
+)
+```
+
+### 2. Capture a snapshot
+
+**Snapshot a specific element:**
+
+```swift
+if let webView {
+  let image = try await ElementSnapshotCapture.captureSnapshot(
+    of: element,
+    in: webView
+  )
+  // image is an NSImage cropped to the element's viewport rect
+}
+```
+
+**Snapshot an arbitrary viewport rect:**
+
+```swift
+let rect = CGRect(x: 50, y: 100, width: 300, height: 200)
+let image = try await ElementSnapshotCapture.captureSnapshot(
+  of: rect,
+  in: webView
+)
+```
+
+**Snapshot the currently selected element (convenience):**
+
+```swift
+let image = try await inspectState.captureSelectedElementSnapshot(
+  in: webView
+)
+```
+
+This uses the live viewport rect (updated on scroll/resize), not the stale rect from click time.
+
+### 3. Send to an AI model
+
+```swift
+let prompt = ElementInspectorPromptBuilder.buildPrompt(
+  element: element,
+  instruction: "Make this button more prominent"
+)
+let screenshot = try await ElementSnapshotCapture.captureSnapshot(
+  of: element,
+  in: webView
+)
+
+// Send both to a multimodal AI model
+let message = [
+  .image(screenshot.tiffRepresentation!),
+  .text(prompt)
+]
+```
+
+### Error handling
+
+```swift
+do {
+  let image = try await ElementSnapshotCapture.captureSnapshot(of: element, in: webView)
+} catch SnapshotError.zeroRect {
+  // Element has zero width or height
+} catch SnapshotError.rectOutOfBounds {
+  // Element is entirely offscreen
+} catch SnapshotError.snapshotFailed(let message) {
+  // WebKit snapshot failed: \(message)
+}
+```
+
 ## API Overview
 
 | Type | Description |
@@ -169,6 +264,8 @@ let context = ElementInspectorPromptBuilder.buildContextPrompt(
 | `InspectableWebView` | `NSViewRepresentable` wrapping `WKWebView` with inspector support |
 | `ElementInspectorBridge` | JavaScript injection and WebKit message handling |
 | `ElementInspectorPromptBuilder` | Constructs structured prompts from element data |
+| `ElementSnapshotCapture` | Standalone element screenshot capture (crop to bounding rect) |
+| `SnapshotError` | Error cases: `zeroRect`, `rectOutOfBounds`, `snapshotFailed` |
 | `.webInspectorOverlay()` | View modifier adding the inspector banner and input overlay |
 
 ### ElementInspectorData Properties
@@ -179,11 +276,45 @@ let context = ElementInspectorPromptBuilder.buildContextPrompt(
 | `tagName` | `String` | DOM tag name (e.g., `"BUTTON"`) |
 | `elementId` | `String` | DOM `id` attribute |
 | `className` | `String` | CSS class string |
-| `textContent` | `String` | Visible text (truncated ~100 chars) |
-| `outerHTML` | `String` | Outer HTML markup (truncated ~500 chars) |
+| `textContent` | `String` | Visible text content |
+| `outerHTML` | `String` | Full outer HTML markup |
 | `cssSelector` | `String` | Computed CSS selector path |
-| `computedStyles` | `[String: String]` | Key computed CSS properties |
+| `computedStyles` | `[String: String]` | Comprehensive computed CSS properties (70+) |
 | `boundingRect` | `CGRect` | Element position and size |
+| `parentTagName` | `String` | Parent element's tag name |
+| `parentStyles` | `[String: String]` | Parent's layout-relevant styles (display, flex, grid, etc.) |
+
+### Captured Computed Styles
+
+The inspector captures a comprehensive set of CSS properties from `getComputedStyle()`:
+
+| Category | Properties |
+|----------|-----------|
+| **Typography** | fontFamily, fontSize, fontWeight, fontStyle, fontVariant, textAlign, textDecoration, textTransform, letterSpacing, lineHeight, wordSpacing, whiteSpace, textOverflow, textIndent, textShadow |
+| **Box model** | paddingTop/Right/Bottom/Left, marginTop/Right/Bottom/Left |
+| **Border** | width, color, style per side + per-corner radius |
+| **Layout** | display, position, top/right/bottom/left, zIndex, flex properties, grid properties, gap, overflow |
+| **Sizing** | width, height, minWidth, maxWidth, minHeight, maxHeight, boxSizing |
+| **Visual** | color, backgroundColor, opacity, backgroundImage/Size/Position/Repeat, boxShadow, outline, filter, backdropFilter, mixBlendMode, clipPath |
+| **Transform** | transform, transformOrigin, transition |
+| **Media** | objectFit, objectPosition |
+
+### Parent Context
+
+When an element is selected, the inspector also captures the parent element's layout context (display, flexDirection, flexWrap, justifyContent, alignItems, alignContent, gap, gridTemplateColumns, gridTemplateRows, position, overflow). This helps AI models understand how the element is positioned within its container.
+
+### Design Toolbar
+
+Canvas includes a design toolbar system for direct visual editing:
+
+| Type | Description |
+|------|-------------|
+| `DesignToolbarValues` | Observable state initialized from an element's computed styles |
+| `DesignToolbarContent` | SwiftUI controls for font, color, size, alignment, spacing, etc. |
+| `DesignEdit` | Structured edit event (property change, text update, fit content, delete) |
+| `PromptToolbarContent` | Text input for AI-powered instruction-based editing |
+| `ElementCategory` | Classifies elements (text, button, image, container) to show relevant controls |
+| `CSSParser` | Utilities for parsing CSS values, colors, and font weights |
 
 ## License
 
