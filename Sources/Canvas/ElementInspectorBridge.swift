@@ -99,6 +99,7 @@ public enum ElementInspectorBridge {
   private static let inspectorJS: String = """
     (function() {
       var overlay = null;
+      var tagLabel = null;
       var currentTarget = null;
       var selectedElement = null;
       var isActive = false;
@@ -172,6 +173,21 @@ public enum ElementInspectorBridge {
           'transition:all 0.08s ease',
           'display:none'
         ].join(';');
+        tagLabel = document.createElement('span');
+        tagLabel.style.cssText = [
+          'position:absolute',
+          'bottom:100%',
+          'right:-2px',
+          'background:#2563eb',
+          'color:#fff',
+          'font-size:10px',
+          'font-family:-apple-system,BlinkMacSystemFont,sans-serif',
+          'line-height:1',
+          'padding:2px 5px',
+          'border-radius:3px 3px 0 0',
+          'white-space:nowrap'
+        ].join(';');
+        overlay.appendChild(tagLabel);
         document.body.appendChild(overlay);
       }
 
@@ -183,6 +199,7 @@ public enum ElementInspectorBridge {
         overlay.style.width = rect.width + 'px';
         overlay.style.height = rect.height + 'px';
         overlay.style.display = 'block';
+        if (tagLabel) tagLabel.textContent = el.tagName.toLowerCase();
       }
 
       function onMouseMove(e) {
