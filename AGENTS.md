@@ -48,6 +48,51 @@ JS click → WKScriptMessageHandler → ElementInspectorBridge.parseElementData(
 - **Parsing** goes in `ElementInspectorBridge.parseElementData()`.
 - **UI** goes in `WebInspectInputView`, `WebInspectContextView`, or `WebInspectorOverlay`.
 - **Prompt formatting** goes in `ElementInspectorPromptBuilder`.
+- **Design toolbar state** goes in `DesignToolbarValues` (observable, initialized from element data).
+- **Design toolbar UI** goes in `DesignToolbarContent` (inline controls for font, color, spacing, etc.).
+- **Design edit events** go in `DesignEdit` (structured actions emitted by the toolbar).
+- **Prompt input UI** goes in `PromptToolbarContent` (text input for AI instructions).
+- **CSS parsing utilities** go in `CSSParser` (inside `DesignToolbarValues.swift`).
+- **Element screenshots** go in `ElementSnapshotCapture` (standalone utility, not coupled to selection flow).
+
+### Captured element data
+
+`ElementInspectorData` captures 70+ computed CSS properties from the DOM element plus parent layout context:
+
+- **Typography**: fontFamily, fontSize, fontWeight, fontStyle, textAlign, textDecoration, textTransform, letterSpacing, lineHeight, etc.
+- **Box model**: paddingTop/Right/Bottom/Left, marginTop/Right/Bottom/Left (individual sides)
+- **Border**: width, color, style per side + per-corner radius
+- **Layout**: display, position, flex/grid properties, gap, overflow, zIndex
+- **Sizing**: width, height, min/max variants, boxSizing
+- **Visual**: color, backgroundColor, opacity, backgroundImage, boxShadow, filter, backdropFilter, transform, etc.
+- **Media**: objectFit, objectPosition
+- **Parent context**: parentTagName + parent's display, flex, grid, gap, position, overflow
+- **Children/siblings**: `children` and `siblings` (`ElementRelationships` with count + up to 10 `ElementSummary` items). Each item has tagName, elementId, className, textContent (truncated to 50 chars).
+
+The highlight overlay shows a tag-name label (e.g., "h1", "div") at the top-right corner of the selection box.
+
+### Element snapshots
+
+`ElementSnapshotCapture` provides standalone screenshot capture, independent of the selection flow:
+
+```swift
+// Snapshot an element's bounding rect
+let image = try await ElementSnapshotCapture.captureSnapshot(of: element, in: webView)
+
+// Snapshot an arbitrary viewport rect
+let image = try await ElementSnapshotCapture.captureSnapshot(of: rect, in: webView)
+
+// Convenience: snapshot the currently selected element via state
+let image = try await inspectState.captureSelectedElementSnapshot(in: webView)
+```
+
+To obtain the `WKWebView` reference, use the `onWebViewReady` callback on `InspectableWebView`:
+
+```swift
+InspectableWebView(url: myURL, isFileURL: false, onWebViewReady: { self.webView = $0 }, ...)
+```
+
+Errors: `SnapshotError.zeroRect`, `.rectOutOfBounds`, `.snapshotFailed(String)`.
 
 ### Style rules
 
@@ -71,7 +116,7 @@ JS click → WKScriptMessageHandler → ElementInspectorBridge.parseElementData(
 Before considering a task complete:
 
 - [ ] `swift build` succeeds
-- [ ] `swift test` passes (all 49+ tests)
+- [ ] `swift test` passes (all 84+ tests)
 - [ ] New public API has `///` doc comments
 - [ ] New logic has corresponding tests
 - [ ] No compiler warnings introduced

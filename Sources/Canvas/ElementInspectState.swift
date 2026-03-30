@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import WebKit
 
 /// The inspector interaction mode.
 public enum InspectMode: Sendable {
@@ -68,6 +69,22 @@ public final class ElementInspectState {
   /// Dismisses the input overlay without deactivating inspect mode.
   public func dismissInput() {
     clearSelection()
+  }
+
+  /// Captures a snapshot of the currently selected element.
+  ///
+  /// Uses the live viewport rect (updated on scroll/resize) rather than
+  /// the rect from click time, so the crop matches what's on screen now.
+  ///
+  /// - Parameter webView: The `WKWebView` displaying the content.
+  /// - Returns: An `NSImage` cropped to the selected element's viewport rect.
+  public func captureSelectedElementSnapshot(
+    in webView: WKWebView
+  ) async throws -> NSImage {
+    guard let rect = selectedElementViewportRect else {
+      throw SnapshotError.zeroRect
+    }
+    return try await ElementSnapshotCapture.captureSnapshot(of: rect, in: webView)
   }
 
   private func clearSelection() {

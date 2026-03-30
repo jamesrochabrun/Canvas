@@ -26,6 +26,11 @@ Sources/Canvas/
   WebInspectContextView.swift         — Read-only element summary (context mode)
   WebInspectorOverlay.swift           — ViewModifier combining banner + overlays
   ElementInspectorPromptBuilder.swift — Structured prompt construction
+  DesignEdit.swift                    — Structured design edit events
+  DesignToolbarValues.swift           — @Observable state for design toolbar controls
+  DesignToolbarContent.swift          — Inline design controls (font, color, spacing, etc.)
+  PromptToolbarContent.swift          — Text input for AI instruction-based editing
+  ElementSnapshotCapture.swift        — Standalone element screenshot capture utility
 ```
 
 **Key patterns**:

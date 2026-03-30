@@ -60,6 +60,11 @@ public enum ElementInspectorBridge {
   public static func parseElementData(_ body: [String: Any]) -> ElementInspectorData {
     let styles = body["computedStyles"] as? [String: String] ?? [:]
     let rect = parseRect(from: body)
+    let parentContext = body["parentContext"] as? [String: Any]
+    let parentTagName = parentContext?["tagName"] as? String ?? ""
+    let parentStyles = parentContext?["styles"] as? [String: String] ?? [:]
+    let children = parseRelationships(from: body["children"])
+    let siblings = parseRelationships(from: body["siblings"])
     return ElementInspectorData(
       id: UUID(),
       tagName: body["tagName"] as? String ?? "",
@@ -69,7 +74,11 @@ public enum ElementInspectorBridge {
       outerHTML: body["outerHTML"] as? String ?? "",
       cssSelector: body["cssSelector"] as? String ?? "",
       computedStyles: styles,
-      boundingRect: rect
+      boundingRect: rect,
+      parentTagName: parentTagName,
+      parentStyles: parentStyles,
+      children: children,
+      siblings: siblings
     )
   }
 
@@ -135,13 +144,91 @@ public enum ElementInspectorBridge {
         return parts.join(' > ') || el.tagName.toLowerCase();
       }
 
+      function captureChildrenSummary(el) {
+        var children = Array.from(el.children);
+        var count = children.length;
+        if (count === 0) return null;
+        var items = children.slice(0, 10).map(function(child) {
+          var entry = { tagName: child.tagName };
+          if (child.id) entry.id = child.id;
+          if (child.className && typeof child.className === 'string' && child.className.trim()) {
+            entry.className = child.className.trim().split(/\\s+/).slice(0, 3).join(' ');
+          }
+          var text = (child.textContent || '').trim();
+          if (text) entry.textContent = text.slice(0, 50);
+          return entry;
+        });
+        return { count: count, items: items };
+      }
+
+      function captureSiblings(el) {
+        var parent = el.parentElement;
+        if (!parent) return null;
+        var siblings = Array.from(parent.children).filter(function(s) { return s !== el; });
+        var count = siblings.length;
+        if (count === 0) return null;
+        var items = siblings.slice(0, 10).map(function(sib) {
+          var entry = { tagName: sib.tagName };
+          if (sib.id) entry.id = sib.id;
+          if (sib.className && typeof sib.className === 'string' && sib.className.trim()) {
+            entry.className = sib.className.trim().split(/\\s+/).slice(0, 3).join(' ');
+          }
+          var text = (sib.textContent || '').trim();
+          if (text) entry.textContent = text.slice(0, 50);
+          return entry;
+        });
+        return { count: count, items: items };
+      }
+
       function captureElementData(el) {
         var styles = window.getComputedStyle(el);
-        var styleKeys = ['color','backgroundColor','fontSize','fontWeight','padding','margin','display','borderRadius','width','height'];
+        var styleKeys = [
+          'color','backgroundColor','opacity','visibility',
+          'fontFamily','fontSize','fontWeight','fontStyle','fontVariant',
+          'textAlign','textDecoration','textTransform','letterSpacing',
+          'lineHeight','wordSpacing','whiteSpace','textOverflow','textIndent',
+          'textShadow',
+          'width','height','minWidth','maxWidth','minHeight','maxHeight',
+          'boxSizing',
+          'display','position','top','right','bottom','left','zIndex',
+          'flexDirection','flexWrap','justifyContent','alignItems','alignSelf',
+          'alignContent','flexGrow','flexShrink','flexBasis','order','gap',
+          'gridTemplateColumns','gridTemplateRows','gridColumn','gridRow',
+          'paddingTop','paddingRight','paddingBottom','paddingLeft',
+          'marginTop','marginRight','marginBottom','marginLeft',
+          'borderTopWidth','borderRightWidth','borderBottomWidth','borderLeftWidth',
+          'borderTopColor','borderRightColor','borderBottomColor','borderLeftColor',
+          'borderTopStyle','borderRightStyle','borderBottomStyle','borderLeftStyle',
+          'borderTopLeftRadius','borderTopRightRadius',
+          'borderBottomRightRadius','borderBottomLeftRadius',
+          'borderRadius',
+          'backgroundImage','backgroundSize','backgroundPosition','backgroundRepeat',
+          'boxShadow','outline','outlineOffset',
+          'overflow','overflowX','overflowY',
+          'transform','transformOrigin',
+          'transition',
+          'cursor','pointerEvents',
+          'objectFit','objectPosition',
+          'filter','backdropFilter','mixBlendMode','clipPath',
+          'listStyleType','verticalAlign'
+        ];
         var computedStyles = {};
         styleKeys.forEach(function(k) { computedStyles[k] = styles[k] || ''; });
-        var text = (el.textContent || '').trim().slice(0, 100);
-        var html = (el.outerHTML || '').slice(0, 500);
+        var text = (el.textContent || '').trim().slice(0, 5000);
+        var html = (el.outerHTML || '').slice(0, 5000);
+        var parentEl = el.parentElement;
+        var parentData = null;
+        if (parentEl && parentEl !== document.body && parentEl !== document.documentElement) {
+          var ps = window.getComputedStyle(parentEl);
+          var parentKeys = [
+            'display','flexDirection','flexWrap','justifyContent',
+            'alignItems','alignContent','gap','gridTemplateColumns',
+            'gridTemplateRows','position','overflow'
+          ];
+          var parentStyles = {};
+          parentKeys.forEach(function(k) { parentStyles[k] = ps[k] || ''; });
+          parentData = { tagName: parentEl.tagName, styles: parentStyles };
+        }
         return {
           tagName: el.tagName,
           elementId: el.id || '',
@@ -150,7 +237,10 @@ public enum ElementInspectorBridge {
           outerHTML: html,
           cssSelector: buildCSSSelector(el),
           computedStyles: computedStyles,
-          boundingRect: captureBoundingRect(el)
+          boundingRect: captureBoundingRect(el),
+          parentContext: parentData,
+          children: captureChildrenSummary(el),
+          siblings: captureSiblings(el)
         };
       }
 
@@ -295,6 +385,23 @@ public enum ElementInspectorBridge {
       window.__elementInspector = { activate: activate, deactivate: deactivate, clearSelection: clearSelection };
     })();
     """
+
+  private static func parseRelationships(from raw: Any?) -> ElementRelationships {
+    guard let dict = raw as? [String: Any],
+          let count = dict["count"] as? Int,
+          let rawItems = dict["items"] as? [[String: Any]] else {
+      return ElementRelationships()
+    }
+    let items = rawItems.map { item in
+      ElementSummary(
+        tagName: item["tagName"] as? String ?? "",
+        elementId: item["id"] as? String ?? "",
+        className: item["className"] as? String ?? "",
+        textContent: item["textContent"] as? String ?? ""
+      )
+    }
+    return ElementRelationships(count: count, items: items)
+  }
 
   private static func parseRect(from body: [String: Any]) -> CGRect {
     let rectDict = body["boundingRect"] as? [String: Double] ?? [:]
