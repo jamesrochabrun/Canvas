@@ -99,4 +99,31 @@ struct ElementInspectorBridgeParsingTests {
     let b = ElementInspectorBridge.parseElementData([:])
     #expect(a.id != b.id)
   }
+
+  @Test func regularLevelMatchesLegacyCaptureProfile() {
+    #expect(ElementInspectorDataLevel.regular.styleKeys == [
+      "color",
+      "backgroundColor",
+      "fontSize",
+      "fontWeight",
+      "padding",
+      "margin",
+      "display",
+      "borderRadius",
+      "width",
+      "height",
+    ])
+    #expect(ElementInspectorDataLevel.regular.textCharacterLimit == 100)
+    #expect(ElementInspectorDataLevel.regular.htmlCharacterLimit == 500)
+    #expect(!ElementInspectorDataLevel.regular.includesExtendedContext)
+  }
+
+  @Test func fullLevelEnablesExpandedCaptureProfile() {
+    #expect(ElementInspectorDataLevel.full.styleKeys.contains("opacity"))
+    #expect(ElementInspectorDataLevel.full.styleKeys.contains("paddingTop"))
+    #expect(ElementInspectorDataLevel.full.styleKeys.contains("boxShadow"))
+    #expect(ElementInspectorDataLevel.full.textCharacterLimit == 5000)
+    #expect(ElementInspectorDataLevel.full.htmlCharacterLimit == 5000)
+    #expect(ElementInspectorDataLevel.full.includesExtendedContext)
+  }
 }

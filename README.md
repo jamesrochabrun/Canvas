@@ -1,11 +1,21 @@
 # Canvas
 
-A Swift library for inspecting and interacting with web elements in `WKWebView` on macOS. Activate inspect mode, hover to highlight elements, click to capture element data, and send instructions or context to your app.
+Canvas is a macOS Swift package for inspecting live `WKWebView` content and sending element context back to your app.
+
+It provides:
+
+- `InspectableWebView` for rendering web content with built-in DOM inspection
+- `ElementInspectState` and `.webInspectorOverlay(...)` for input and context flows
+- configurable inspector payload levels with `ElementInspectorDataLevel`
+- typed style access with `ElementComputedStyleSnapshot`
+- optional parent/children/sibling context for richer source resolution
+- `ElementSnapshotCapture` for cropped element screenshots
+- `DesignToolbarContent` and `DesignEdit` for inline visual editing
 
 ## Requirements
 
 - macOS 14+
-- Swift 6.0+ (Swift tools version)
+- Swift 6.0 tools
 
 ## Installation
 
@@ -28,49 +38,48 @@ Then add it to your target:
 )
 ```
 
-Or in Xcode: **File > Add Package Dependencies** and enter `https://github.com/jamesrochabrun/Canvas.git`.
-
 ## Quick Start
 
 ```swift
 import Canvas
 import SwiftUI
+import WebKit
 
 struct ContentView: View {
-
   @State private var inspectState = ElementInspectState()
   @State private var isLoading = false
   @State private var currentURL: URL?
+  @State private var selectedElement: ElementInspectorData?
+  @State private var webView: WKWebView?
 
   var body: some View {
     VStack {
-      HStack {
-        Button("Inspect") {
-          inspectState.activate()
-        }
+      Button("Inspect") {
+        inspectState.activate(mode: .input)
       }
-      .padding()
 
       InspectableWebView(
         url: URL(string: "https://example.com")!,
         isFileURL: false,
-        isLoading: $isLoading,
-        currentURL: $currentURL,
+        inspectorDataLevel: .regular,
+        onLoadingChange: { isLoading = $0 },
+        onURLChange: { currentURL = $0 },
         onElementSelected: { element in
+          selectedElement = element
           inspectState.selectElement(element)
         },
-        isInspectModeActive: .init(
+        isInspectModeActive: Binding(
           get: { inspectState.isActive },
           set: { _ in }
         ),
-        selectedElementId: inspectState.selectedElement?.id
+        selectedElementId: inspectState.selectedElement?.id,
+        onWebViewReady: { webView = $0 }
       )
       .webInspectorOverlay(state: inspectState) { element, instruction in
         let prompt = ElementInspectorPromptBuilder.buildPrompt(
           element: element,
           instruction: instruction
         )
-        // Send prompt to your AI agent, terminal, etc.
         print(prompt)
       }
     }
@@ -82,15 +91,13 @@ struct ContentView: View {
 
 Canvas supports two interaction modes.
 
-### Input Mode (default)
+### Input Mode
 
-The user clicks an element, types an instruction in the floating text editor, and submits. This is the default behavior.
+The user clicks an element, types an instruction, and submits.
 
 ```swift
-// Activate input mode
-inspectState.activate() // or inspectState.activate(mode: .input)
+inspectState.activate(mode: .input)
 
-// Handle submission
 .webInspectorOverlay(state: inspectState) { element, instruction in
   let prompt = ElementInspectorPromptBuilder.buildPrompt(
     element: element,
@@ -102,13 +109,11 @@ inspectState.activate() // or inspectState.activate(mode: .input)
 
 ### Context Mode
 
-The user clicks an element and its data is sent to the app immediately — no text input required. The inspector stays active so the user can keep clicking elements.
+The user clicks an element and the captured data is sent to the host app immediately.
 
 ```swift
-// Activate context mode
 inspectState.activate(mode: .context)
 
-// Handle immediate selection
 .webInspectorOverlay(
   state: inspectState,
   onContextSelection: { element in
@@ -120,76 +125,81 @@ inspectState.activate(mode: .context)
 )
 ```
 
-## Building Prompts
+## Inspector Payload Levels
 
-`ElementInspectorPromptBuilder` produces structured text from captured element data.
+`ElementInspectorDataLevel` controls how much DOM and CSS context Canvas captures.
 
-**Input mode** — includes the user's instruction:
+### `.regular`
+
+The default compact payload:
+
+- core metadata (`tagName`, `cssSelector`, text, bounding rect)
+- a small computed-style subset
+- no parent/children/sibling neighborhood context
+
+Use this when you want lightweight prompt context or multi-selection capture.
+
+### `.full`
+
+The rich payload:
+
+- expanded computed styles (layout, typography, effects, box model, media, transform)
+- parent layout context
+- children and sibling summaries
+- larger text and HTML capture limits
+
+Use this when you need source mapping, inline design editing, or richer debugging context.
 
 ```swift
-let prompt = ElementInspectorPromptBuilder.buildPrompt(
-  element: element,
-  instruction: "Make this button red"
+InspectableWebView(
+  url: previewURL,
+  isFileURL: false,
+  inspectorDataLevel: .full,
+  onElementSelected: handleSelection
 )
-// I'm looking at a web element in the live preview:
-//
-// **Element**: <button class="btn">Submit</button>
-// **CSS Selector**: form > button.btn
-// **Computed Styles**:
-//   backgroundColor: #007AFF
-//   fontSize: 16px
-//
-// User request: Make this button red
-//
-// Please modify the source code to make this change.
 ```
 
-**Context mode** — element context only:
+## Working With Captured Data
+
+`ElementInspectorData` still exposes the raw `computedStyles` dictionary, but the preferred API is the typed accessors:
 
 ```swift
-let context = ElementInspectorPromptBuilder.buildContextPrompt(
-  element: element
-)
-// Selected web element context:
-//
-// **Element**: <button class="btn">Submit</button>
-// **CSS Selector**: form > button.btn
-// **Computed Styles**:
-//   backgroundColor: #007AFF
-//   fontSize: 16px
+let styles = element.styles
+
+styles.display
+styles.position
+styles.fontSize
+styles.textAlign
+styles.borderRadius
+styles.padding.top
+styles.paddingShorthand
+styles.margin.left
+styles.marginShorthand
+styles.boxShadow
+```
+
+The parent container is available as structured context:
+
+```swift
+if let parent = element.parentContext {
+  print(parent.tagName)
+  print(parent.display ?? "block")
+  print(parent.justifyContent ?? "unset")
+  print(parent.gap ?? "0px")
+}
 ```
 
 ## Element Snapshots
 
-`ElementSnapshotCapture` captures a cropped screenshot of any element's bounding rect from the `WKWebView`. It's a standalone utility — use it to send visual context to an AI model, or to verify a design change looks correct after the AI edits code.
-
-No permissions or plist entries required.
-
-### 1. Get the WKWebView reference
-
-Use the `onWebViewReady` callback on `InspectableWebView`:
+Use `onWebViewReady` to keep a `WKWebView` reference, then capture a cropped snapshot of the selected element:
 
 ```swift
-@State private var inspectState = ElementInspectState()
-@State private weak var webView: WKWebView?
-
 InspectableWebView(
-  url: URL(string: "https://example.com")!,
+  url: previewURL,
   isFileURL: false,
-  onElementSelected: { element in
-    inspectState.selectElement(element)
-  },
-  isInspectModeActive: .init(
-    get: { inspectState.isActive },
-    set: { _ in }
-  ),
-  onWebViewReady: { self.webView = $0 }
+  onWebViewReady: { webView = $0 }
 )
 ```
-
-### 2. Capture a snapshot
-
-**Snapshot a specific element:**
 
 ```swift
 if let webView {
@@ -197,60 +207,57 @@ if let webView {
     of: element,
     in: webView
   )
-  // image is an NSImage cropped to the element's viewport rect
 }
 ```
 
-**Snapshot an arbitrary viewport rect:**
+You can also capture an arbitrary viewport rect:
 
 ```swift
-let rect = CGRect(x: 50, y: 100, width: 300, height: 200)
+let rect = CGRect(x: 40, y: 80, width: 320, height: 180)
 let image = try await ElementSnapshotCapture.captureSnapshot(
   of: rect,
   in: webView
 )
 ```
 
-**Snapshot the currently selected element (convenience):**
+## Design Toolbar
+
+Canvas exposes a reusable inline design toolbar for quick style edits.
 
 ```swift
-let image = try await inspectState.captureSelectedElementSnapshot(
-  in: webView
-)
+@State private var toolbarValues: DesignToolbarValues?
+
+func handleSelection(_ element: ElementInspectorData) {
+  inspectState.selectElement(element)
+  toolbarValues = DesignToolbarValues(element: element)
+}
 ```
 
-This uses the live viewport rect (updated on scroll/resize), not the stale rect from click time.
-
-### 3. Send to an AI model
-
 ```swift
-let prompt = ElementInspectorPromptBuilder.buildPrompt(
-  element: element,
-  instruction: "Make this button more prominent"
-)
-let screenshot = try await ElementSnapshotCapture.captureSnapshot(
-  of: element,
-  in: webView
-)
-
-// Send both to a multimodal AI model
-let message = [
-  .image(screenshot.tiffRepresentation!),
-  .text(prompt)
-]
+if let element = inspectState.selectedElement,
+   let toolbarValues {
+  DesignToolbarContent(
+    values: toolbarValues,
+    element: element,
+    onEdit: { edit in
+      apply(edit)
+    }
+  )
+}
 ```
 
-### Error handling
+Toolbar edits arrive as strongly typed `DesignEdit` values:
 
 ```swift
-do {
-  let image = try await ElementSnapshotCapture.captureSnapshot(of: element, in: webView)
-} catch SnapshotError.zeroRect {
-  // Element has zero width or height
-} catch SnapshotError.rectOutOfBounds {
-  // Element is entirely offscreen
-} catch SnapshotError.snapshotFailed(let message) {
-  // WebKit snapshot failed: \(message)
+switch edit.action {
+case .updateProperty(.fontSize, let value):
+  updateCSS("font-size", to: value)
+case .updateTextContent(let text):
+  updateText(to: text)
+case .fitContent:
+  fitElementToContent()
+case .deleteElement:
+  deleteElement()
 }
 ```
 
@@ -258,81 +265,19 @@ do {
 
 | Type | Description |
 |------|-------------|
-| `ElementInspectState` | Observable state machine controlling the inspector lifecycle |
-| `InspectMode` | `.input` (type instruction) or `.context` (immediate send) |
-| `ElementInspectorData` | Immutable snapshot of a captured DOM element |
+| `ElementInspectState` | Observable state machine controlling inspect lifecycle |
+| `InspectMode` | `.input` or `.context` |
 | `InspectableWebView` | `NSViewRepresentable` wrapping `WKWebView` with inspector support |
-| `ElementInspectorBridge` | JavaScript injection and WebKit message handling |
-| `ElementInspectorPromptBuilder` | Constructs structured prompts from element data |
-| `ElementSnapshotCapture` | Standalone element screenshot capture (crop to bounding rect) |
-| `SnapshotError` | Error cases: `zeroRect`, `rectOutOfBounds`, `snapshotFailed` |
-| `.webInspectorOverlay()` | View modifier adding the inspector banner and input overlay |
-
-### ElementInspectorData Properties
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `id` | `UUID` | Unique identifier |
-| `tagName` | `String` | DOM tag name (e.g., `"BUTTON"`) |
-| `elementId` | `String` | DOM `id` attribute |
-| `className` | `String` | CSS class string |
-| `textContent` | `String` | Visible text content (capped at 5,000 chars) |
-| `outerHTML` | `String` | Outer HTML markup (capped at 5,000 chars) |
-| `cssSelector` | `String` | Computed CSS selector path |
-| `computedStyles` | `[String: String]` | Comprehensive computed CSS properties (70+) |
-| `boundingRect` | `CGRect` | Element position and size |
-| `parentTagName` | `String` | Parent element's tag name |
-| `parentStyles` | `[String: String]` | Parent's layout-relevant styles (display, flex, grid, etc.) |
-| `children` | `ElementRelationships` | Direct children summary (count + up to 10 items with tag, id, class, text) |
-| `siblings` | `ElementRelationships` | Sibling elements summary (excludes the selected element itself) |
-
-### Captured Computed Styles
-
-The inspector captures a comprehensive set of CSS properties from `getComputedStyle()`:
-
-| Category | Properties |
-|----------|-----------|
-| **Typography** | fontFamily, fontSize, fontWeight, fontStyle, fontVariant, textAlign, textDecoration, textTransform, letterSpacing, lineHeight, wordSpacing, whiteSpace, textOverflow, textIndent, textShadow |
-| **Box model** | paddingTop/Right/Bottom/Left, marginTop/Right/Bottom/Left |
-| **Border** | width, color, style per side + per-corner radius |
-| **Layout** | display, position, top/right/bottom/left, zIndex, flex properties, grid properties, gap, overflow |
-| **Sizing** | width, height, minWidth, maxWidth, minHeight, maxHeight, boxSizing |
-| **Visual** | color, backgroundColor, opacity, backgroundImage/Size/Position/Repeat, boxShadow, outline, filter, backdropFilter, mixBlendMode, clipPath |
-| **Transform** | transform, transformOrigin, transition |
-| **Media** | objectFit, objectPosition |
-
-### Children & Siblings
-
-When an element is selected, the inspector captures summaries of its direct children and siblings (up to 10 each). Each summary includes the tag name, id, class, and text content. This enables AI models to reason about container-level edits like "add a fourth card," "reorder these items," or "make this one stand out from its siblings."
-
-The prompt builder renders this as:
-
-```
-**Children** (3):
-  div.card — "Authentic Recipes"
-  div.card — "Fresh Ingredients"
-  div.card — "Family Atmosphere"
-**Siblings** (2):
-  header.hero — "Welcome"
-  footer — "© 2024"
-```
-
-### Parent Context
-
-When an element is selected, the inspector also captures the parent element's layout context (display, flexDirection, flexWrap, justifyContent, alignItems, alignContent, gap, gridTemplateColumns, gridTemplateRows, position, overflow). This helps AI models understand how the element is positioned within its container.
-
-### Design Toolbar
-
-Canvas includes a design toolbar system for direct visual editing:
-
-| Type | Description |
-|------|-------------|
-| `DesignToolbarValues` | Observable state initialized from an element's computed styles |
-| `DesignToolbarContent` | SwiftUI controls for font, color, size, alignment, spacing, etc. |
-| `DesignEdit` | Structured edit event (property change, text update, fit content, delete) |
-| `PromptToolbarContent` | Text input for AI-powered instruction-based editing |
-| `ElementCategory` | Classifies elements (text, button, image, container) to show relevant controls |
-| `CSSParser` | Utilities for parsing CSS values, colors, and font weights |
+| `ElementInspectorDataLevel` | Controls compact vs rich capture |
+| `ElementInspectorData` | Immutable snapshot of a selected DOM element |
+| `ElementComputedStyleSnapshot` | Typed accessors over `computedStyles` |
+| `CSSBoxEdges` | Per-side box-model values with synthesized shorthand |
+| `ParentLayoutContext` | Typed layout context derived from the parent element |
+| `ElementInspectorPromptBuilder` | Builds structured prompt/context text |
+| `ElementSnapshotCapture` | Cropped element screenshot capture |
+| `DesignToolbarValues` | Observable toolbar state initialized from element styles |
+| `DesignToolbarContent` | Reusable SwiftUI toolbar controls |
+| `DesignEdit` | Structured edit events emitted by the toolbar |
 
 ## License
 

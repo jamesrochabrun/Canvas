@@ -19,7 +19,9 @@ Canvas is a macOS Swift package for web element inspection in WKWebView.
 ```
 Sources/Canvas/
   ElementInspectState.swift           — @Observable state machine (InspectMode, lifecycle)
+  ElementInspectorDataLevel.swift     — Capture level selection (regular vs full)
   ElementInspectorData.swift          — Immutable Sendable struct for captured DOM data
+  ElementComputedStyleSnapshot.swift  — Typed style and parent-context accessors
   ElementInspectorBridge.swift        — JS injection, WKScriptMessageHandler, parsing
   InspectableWebView.swift            — NSViewRepresentable wrapping WKWebView
   WebInspectInputView.swift           — Floating text-input overlay (input mode)
@@ -38,6 +40,51 @@ Sources/Canvas/
 - Value types for data (`ElementInspectorData`), reference types for state (`ElementInspectState`)
 - `WeakScriptMessageHandler` proxy to avoid WKWebView retain cycles
 - Coordinator pattern for `NSViewRepresentable` lifecycle
+
+## Inspector Capture Levels
+
+Canvas supports two capture levels via `ElementInspectorDataLevel`:
+
+- `regular`: compact payload for lightweight selection/context flows
+- `full`: expanded computed styles plus parent, children, and sibling context
+
+`InspectableWebView` defaults to `.regular`:
+
+```swift
+InspectableWebView(
+  url: previewURL,
+  isFileURL: false,
+  inspectorDataLevel: .regular,
+  onElementSelected: handleSelection
+)
+```
+
+Use `.full` only when the host app actually needs richer source resolution or inline design tooling.
+
+## Normalized Style Access
+
+Prefer the typed accessors on `ElementInspectorData` over ad hoc raw dictionary reads:
+
+```swift
+let styles = element.styles
+styles.padding.top
+styles.paddingShorthand
+styles.margin.left
+styles.display
+styles.textAlign
+styles.boxShadow
+```
+
+For parent layout context:
+
+```swift
+let parent = element.parentContext
+parent?.display
+parent?.justifyContent
+parent?.gap
+```
+
+The raw `computedStyles` dictionary is still available as an escape hatch, but new app-facing code should be built on the typed models.
 
 ## Code Style
 
@@ -94,3 +141,11 @@ struct SomeTests {
 
 - **Input mode** (`.input`): select element → type instruction → submit via `onSubmit`
 - **Context mode** (`.context`): select element → data sent immediately via `onContextSelection` → auto-dismiss
+
+## Documentation
+
+If you change public inspector payloads, normalized style models, or the toolbar API, update:
+
+- `README.md`
+- `AGENTS.md`
+- `CLAUDE.md`

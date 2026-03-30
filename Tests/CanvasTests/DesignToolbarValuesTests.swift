@@ -169,6 +169,10 @@ struct DesignToolbarValuesTests {
           "fontSize": "18px",
           "fontWeight": "600",
           "borderRadius": "8px",
+          "paddingTop": "12px",
+          "paddingRight": "20px",
+          "paddingBottom": "12px",
+          "paddingLeft": "20px",
         ],
         boundingRect: CGRect(x: 100, y: 200, width: 160, height: 48)
       )
@@ -181,6 +185,7 @@ struct DesignToolbarValuesTests {
       #expect(values.backgroundColor == "rgb(220, 38, 38)")
       #expect(values.isBold)
       #expect(values.borderRadius == "8px")
+      #expect(values.padding == "12px 20px")
     }
 
     @Test("Defaults for missing styles")
