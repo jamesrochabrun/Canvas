@@ -283,6 +283,8 @@ do {
 | `boundingRect` | `CGRect` | Element position and size |
 | `parentTagName` | `String` | Parent element's tag name |
 | `parentStyles` | `[String: String]` | Parent's layout-relevant styles (display, flex, grid, etc.) |
+| `cssVariables` | `[String: String]` | CSS custom properties used by this element (`"--primary"` → `"rgb(37,99,235)"`) |
+| `cssVariableBindings` | `[String: String]` | Maps CSS properties to their `var()` expressions (`"color"` → `"var(--primary)"`) |
 
 ### Captured Computed Styles
 
@@ -298,6 +300,21 @@ The inspector captures a comprehensive set of CSS properties from `getComputedSt
 | **Visual** | color, backgroundColor, opacity, backgroundImage/Size/Position/Repeat, boxShadow, outline, filter, backdropFilter, mixBlendMode, clipPath |
 | **Transform** | transform, transformOrigin, transition |
 | **Media** | objectFit, objectPosition |
+
+### CSS Custom Properties (Design Tokens)
+
+When an element's styles use CSS variables (e.g., `color: var(--primary)`), the inspector captures:
+
+- **`cssVariables`**: Variable name → resolved value (e.g., `"--primary"` → `"rgb(37, 99, 235)"`)
+- **`cssVariableBindings`**: CSS property → `var()` expression (e.g., `"color"` → `"var(--primary)"`)
+
+This lets AI models edit design tokens instead of hardcoding values. The prompt builder renders this as:
+
+```
+**CSS Variables**:
+  color uses var(--primary) = rgb(37, 99, 235)
+  background-color uses var(--bg-surface) = rgb(255, 255, 255)
+```
 
 ### Parent Context
 

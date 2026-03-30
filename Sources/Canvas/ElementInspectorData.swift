@@ -30,6 +30,10 @@ public struct ElementInspectorData: Identifiable, Equatable, Sendable {
   public let parentTagName: String
   /// Parent element's layout-relevant computed styles (display, flex, grid, etc.).
   public let parentStyles: [String: String]
+  /// CSS custom properties (variables) used by this element (`"--primary"` → `"rgb(37,99,235)"`).
+  public let cssVariables: [String: String]
+  /// Maps CSS properties to their `var()` expressions (`"color"` → `"var(--primary)"`).
+  public let cssVariableBindings: [String: String]
 
   public init(
     id: UUID = UUID(),
@@ -42,7 +46,9 @@ public struct ElementInspectorData: Identifiable, Equatable, Sendable {
     computedStyles: [String: String],
     boundingRect: CGRect,
     parentTagName: String = "",
-    parentStyles: [String: String] = [:]
+    parentStyles: [String: String] = [:],
+    cssVariables: [String: String] = [:],
+    cssVariableBindings: [String: String] = [:]
   ) {
     self.id = id
     self.tagName = tagName
@@ -55,5 +61,7 @@ public struct ElementInspectorData: Identifiable, Equatable, Sendable {
     self.boundingRect = boundingRect
     self.parentTagName = parentTagName
     self.parentStyles = parentStyles
+    self.cssVariables = cssVariables
+    self.cssVariableBindings = cssVariableBindings
   }
 }

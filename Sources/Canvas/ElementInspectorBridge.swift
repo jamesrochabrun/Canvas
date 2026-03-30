@@ -63,6 +63,8 @@ public enum ElementInspectorBridge {
     let parentContext = body["parentContext"] as? [String: Any]
     let parentTagName = parentContext?["tagName"] as? String ?? ""
     let parentStyles = parentContext?["styles"] as? [String: String] ?? [:]
+    let cssVariables = body["cssVariables"] as? [String: String] ?? [:]
+    let cssVariableBindings = body["cssVariableBindings"] as? [String: String] ?? [:]
     return ElementInspectorData(
       id: UUID(),
       tagName: body["tagName"] as? String ?? "",
@@ -74,7 +76,9 @@ public enum ElementInspectorBridge {
       computedStyles: styles,
       boundingRect: rect,
       parentTagName: parentTagName,
-      parentStyles: parentStyles
+      parentStyles: parentStyles,
+      cssVariables: cssVariables,
+      cssVariableBindings: cssVariableBindings
     )
   }
 
@@ -140,6 +144,50 @@ public enum ElementInspectorBridge {
         return parts.join(' > ') || el.tagName.toLowerCase();
       }
 
+      function captureCSSVariables(el) {
+        var variables = {};
+        var bindings = {};
+        var computed = window.getComputedStyle(el);
+        try {
+          for (var s = 0; s < document.styleSheets.length; s++) {
+            var rules;
+            try { rules = document.styleSheets[s].cssRules; } catch(e) { continue; }
+            if (!rules) continue;
+            for (var r = 0; r < rules.length; r++) {
+              var rule = rules[r];
+              if (!rule.selectorText || !rule.style) continue;
+              try { if (!el.matches(rule.selectorText)) continue; } catch(e) { continue; }
+              for (var p = 0; p < rule.style.length; p++) {
+                var prop = rule.style[p];
+                var val = rule.style.getPropertyValue(prop);
+                var matches = val.match(/var\\(\\s*(--[a-zA-Z0-9_-]+)/g);
+                if (matches) {
+                  matches.forEach(function(m) {
+                    var name = m.replace(/var\\(\\s*/, '');
+                    variables[name] = computed.getPropertyValue(name).trim();
+                  });
+                  bindings[prop] = val.trim();
+                }
+              }
+            }
+          }
+        } catch(e) {}
+        var inlineStyle = el.style;
+        for (var i = 0; i < inlineStyle.length; i++) {
+          var prop = inlineStyle[i];
+          var val = inlineStyle.getPropertyValue(prop);
+          var matches = val.match(/var\\(\\s*(--[a-zA-Z0-9_-]+)/g);
+          if (matches) {
+            matches.forEach(function(m) {
+              var name = m.replace(/var\\(\\s*/, '');
+              variables[name] = computed.getPropertyValue(name).trim();
+            });
+            bindings[prop] = val.trim();
+          }
+        }
+        return { variables: variables, bindings: bindings };
+      }
+
       function captureElementData(el) {
         var styles = window.getComputedStyle(el);
         var styleKeys = [
@@ -189,6 +237,7 @@ public enum ElementInspectorBridge {
           parentKeys.forEach(function(k) { parentStyles[k] = ps[k] || ''; });
           parentData = { tagName: parentEl.tagName, styles: parentStyles };
         }
+        var cssVars = captureCSSVariables(el);
         return {
           tagName: el.tagName,
           elementId: el.id || '',
@@ -198,7 +247,9 @@ public enum ElementInspectorBridge {
           cssSelector: buildCSSSelector(el),
           computedStyles: computedStyles,
           boundingRect: captureBoundingRect(el),
-          parentContext: parentData
+          parentContext: parentData,
+          cssVariables: cssVars.variables,
+          cssVariableBindings: cssVars.bindings
         };
       }
 

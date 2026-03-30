@@ -138,6 +138,19 @@ public enum ElementInspectorPromptBuilder {
       lines.append(contentsOf: presentStyles)
     }
 
+    if !element.cssVariableBindings.isEmpty {
+      let bindingEntries = element.cssVariableBindings.map { property, expression -> String in
+        let varName = expression
+          .replacingOccurrences(of: "var(", with: "")
+          .replacingOccurrences(of: ")", with: "")
+          .trimmingCharacters(in: .whitespaces)
+        let resolved = element.cssVariables[varName] ?? ""
+        return "  \(property) uses \(expression)\(resolved.isEmpty ? "" : " = \(resolved)")"
+      }.sorted()
+      lines.append("**CSS Variables**:")
+      lines.append(contentsOf: bindingEntries)
+    }
+
     if !element.parentTagName.isEmpty {
       let parentStyleEntries = element.parentStyles.compactMap { key, value -> String? in
         guard !value.isEmpty else { return nil }

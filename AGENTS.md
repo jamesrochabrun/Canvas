@@ -67,6 +67,7 @@ JS click → WKScriptMessageHandler → ElementInspectorBridge.parseElementData(
 - **Visual**: color, backgroundColor, opacity, backgroundImage, boxShadow, filter, backdropFilter, transform, etc.
 - **Media**: objectFit, objectPosition
 - **Parent context**: parentTagName + parent's display, flex, grid, gap, position, overflow
+- **CSS variables**: `cssVariables` (variable name → resolved value), `cssVariableBindings` (property → var expression). Extracted by walking `document.styleSheets` for matching rules that use `var()`.
 
 The highlight overlay shows a tag-name label (e.g., "h1", "div") at the top-right corner of the selection box.
 
