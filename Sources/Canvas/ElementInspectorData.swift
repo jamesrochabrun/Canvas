@@ -49,9 +49,9 @@ public struct ElementInspectorData: Identifiable, Equatable, Sendable {
   public let elementId: String
   /// `class` attribute string (may be empty)
   public let className: String
-  /// Visible text content
+  /// Visible text content (capped at 5,000 chars)
   public let textContent: String
-  /// Outer HTML markup
+  /// Outer HTML markup (capped at 5,000 chars)
   public let outerHTML: String
   /// Unique CSS selector path, e.g. `.form > button.primary`
   public let cssSelector: String
@@ -63,16 +63,10 @@ public struct ElementInspectorData: Identifiable, Equatable, Sendable {
   public let parentTagName: String
   /// Parent element's layout-relevant computed styles (display, flex, grid, etc.).
   public let parentStyles: [String: String]
-  /// CSS custom properties (variables) used by this element (`"--primary"` → `"rgb(37,99,235)"`).
-  public let cssVariables: [String: String]
-  /// Maps CSS properties to their `var()` expressions (`"color"` → `"var(--primary)"`).
-  public let cssVariableBindings: [String: String]
   /// Direct children summary (tag, id, class, text for up to 10 children).
   public let children: ElementRelationships
   /// Sibling elements summary (excludes the selected element itself).
   public let siblings: ElementRelationships
-  /// Interactive state styles from pseudo-class rules (e.g. `"hover"` → `["background-color": "blue"]`).
-  public let interactiveStates: [String: [String: String]]
 
   public init(
     id: UUID = UUID(),
@@ -86,11 +80,8 @@ public struct ElementInspectorData: Identifiable, Equatable, Sendable {
     boundingRect: CGRect,
     parentTagName: String = "",
     parentStyles: [String: String] = [:],
-    cssVariables: [String: String] = [:],
-    cssVariableBindings: [String: String] = [:],
     children: ElementRelationships = ElementRelationships(),
-    siblings: ElementRelationships = ElementRelationships(),
-    interactiveStates: [String: [String: String]] = [:]
+    siblings: ElementRelationships = ElementRelationships()
   ) {
     self.id = id
     self.tagName = tagName
@@ -103,10 +94,7 @@ public struct ElementInspectorData: Identifiable, Equatable, Sendable {
     self.boundingRect = boundingRect
     self.parentTagName = parentTagName
     self.parentStyles = parentStyles
-    self.cssVariables = cssVariables
-    self.cssVariableBindings = cssVariableBindings
     self.children = children
     self.siblings = siblings
-    self.interactiveStates = interactiveStates
   }
 }

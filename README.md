@@ -276,18 +276,15 @@ do {
 | `tagName` | `String` | DOM tag name (e.g., `"BUTTON"`) |
 | `elementId` | `String` | DOM `id` attribute |
 | `className` | `String` | CSS class string |
-| `textContent` | `String` | Visible text content |
-| `outerHTML` | `String` | Full outer HTML markup |
+| `textContent` | `String` | Visible text content (capped at 5,000 chars) |
+| `outerHTML` | `String` | Outer HTML markup (capped at 5,000 chars) |
 | `cssSelector` | `String` | Computed CSS selector path |
 | `computedStyles` | `[String: String]` | Comprehensive computed CSS properties (70+) |
 | `boundingRect` | `CGRect` | Element position and size |
 | `parentTagName` | `String` | Parent element's tag name |
 | `parentStyles` | `[String: String]` | Parent's layout-relevant styles (display, flex, grid, etc.) |
-| `cssVariables` | `[String: String]` | CSS custom properties used by this element (`"--primary"` → `"rgb(37,99,235)"`) |
-| `cssVariableBindings` | `[String: String]` | Maps CSS properties to their `var()` expressions (`"color"` → `"var(--primary)"`) |
 | `children` | `ElementRelationships` | Direct children summary (count + up to 10 items with tag, id, class, text) |
 | `siblings` | `ElementRelationships` | Sibling elements summary (excludes the selected element itself) |
-| `interactiveStates` | `[String: [String: String]]` | Pseudo-class styles: `"hover"` → `["background-color": "blue"]` |
 
 ### Captured Computed Styles
 
@@ -304,21 +301,6 @@ The inspector captures a comprehensive set of CSS properties from `getComputedSt
 | **Transform** | transform, transformOrigin, transition |
 | **Media** | objectFit, objectPosition |
 
-### CSS Custom Properties (Design Tokens)
-
-When an element's styles use CSS variables (e.g., `color: var(--primary)`), the inspector captures:
-
-- **`cssVariables`**: Variable name → resolved value (e.g., `"--primary"` → `"rgb(37, 99, 235)"`)
-- **`cssVariableBindings`**: CSS property → `var()` expression (e.g., `"color"` → `"var(--primary)"`)
-
-This lets AI models edit design tokens instead of hardcoding values. The prompt builder renders this as:
-
-```
-**CSS Variables**:
-  color uses var(--primary) = rgb(37, 99, 235)
-  background-color uses var(--bg-surface) = rgb(255, 255, 255)
-```
-
 ### Children & Siblings
 
 When an element is selected, the inspector captures summaries of its direct children and siblings (up to 10 each). Each summary includes the tag name, id, class, and text content. This enables AI models to reason about container-level edits like "add a fourth card," "reorder these items," or "make this one stand out from its siblings."
@@ -333,22 +315,6 @@ The prompt builder renders this as:
 **Siblings** (2):
   header.hero — "Welcome"
   footer — "© 2024"
-```
-
-### Interactive States
-
-The inspector captures styles from pseudo-class CSS rules (`:hover`, `:focus`, `:active`, `:focus-visible`, `:focus-within`, `:disabled`, `:checked`) that match the selected element. This enables AI models to edit interaction styles — e.g., when the user says "change the hover color," the AI knows the current hover styles.
-
-The prompt builder renders this as:
-
-```
-**Interactive States**:
-  :hover
-    background-color: rgb(37, 99, 235)
-    color: rgb(255, 255, 255)
-  :focus
-    outline: 2px solid rgb(37, 99, 235)
-    outline-offset: 2px
 ```
 
 ### Parent Context
