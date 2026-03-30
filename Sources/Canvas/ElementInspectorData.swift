@@ -71,6 +71,8 @@ public struct ElementInspectorData: Identifiable, Equatable, Sendable {
   public let children: ElementRelationships
   /// Sibling elements summary (excludes the selected element itself).
   public let siblings: ElementRelationships
+  /// Interactive state styles from pseudo-class rules (e.g. `"hover"` → `["background-color": "blue"]`).
+  public let interactiveStates: [String: [String: String]]
 
   public init(
     id: UUID = UUID(),
@@ -87,7 +89,8 @@ public struct ElementInspectorData: Identifiable, Equatable, Sendable {
     cssVariables: [String: String] = [:],
     cssVariableBindings: [String: String] = [:],
     children: ElementRelationships = ElementRelationships(),
-    siblings: ElementRelationships = ElementRelationships()
+    siblings: ElementRelationships = ElementRelationships(),
+    interactiveStates: [String: [String: String]] = [:]
   ) {
     self.id = id
     self.tagName = tagName
@@ -104,5 +107,6 @@ public struct ElementInspectorData: Identifiable, Equatable, Sendable {
     self.cssVariableBindings = cssVariableBindings
     self.children = children
     self.siblings = siblings
+    self.interactiveStates = interactiveStates
   }
 }

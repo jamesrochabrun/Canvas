@@ -67,6 +67,7 @@ public enum ElementInspectorBridge {
     let cssVariableBindings = body["cssVariableBindings"] as? [String: String] ?? [:]
     let children = parseRelationships(from: body["children"])
     let siblings = parseRelationships(from: body["siblings"])
+    let interactiveStates = parseInteractiveStates(from: body["interactiveStates"])
     return ElementInspectorData(
       id: UUID(),
       tagName: body["tagName"] as? String ?? "",
@@ -82,7 +83,8 @@ public enum ElementInspectorBridge {
       cssVariables: cssVariables,
       cssVariableBindings: cssVariableBindings,
       children: children,
-      siblings: siblings
+      siblings: siblings,
+      interactiveStates: interactiveStates
     )
   }
 
@@ -192,6 +194,43 @@ public enum ElementInspectorBridge {
         return { variables: variables, bindings: bindings };
       }
 
+      function captureInteractiveStates(el) {
+        var pseudos = [':hover',':focus',':active',':focus-visible',':focus-within',':disabled',':checked'];
+        var states = {};
+        try {
+          for (var s = 0; s < document.styleSheets.length; s++) {
+            var rules;
+            try { rules = document.styleSheets[s].cssRules; } catch(e) { continue; }
+            if (!rules) continue;
+            for (var r = 0; r < rules.length; r++) {
+              var rule = rules[r];
+              if (!rule.selectorText || !rule.style || rule.style.length === 0) continue;
+              var selectors = rule.selectorText.split(',');
+              for (var si = 0; si < selectors.length; si++) {
+                var sel = selectors[si].trim();
+                pseudos.forEach(function(pseudo) {
+                  if (sel.indexOf(pseudo) === -1) return;
+                  var base = sel.split(pseudo).join('').trim();
+                  if (!base) base = '*';
+                  try { if (!el.matches(base)) return; } catch(e) { return; }
+                  var name = pseudo.slice(1);
+                  if (!states[name]) states[name] = {};
+                  for (var p = 0; p < rule.style.length; p++) {
+                    var prop = rule.style[p];
+                    states[name][prop] = rule.style.getPropertyValue(prop).trim();
+                  }
+                });
+              }
+            }
+          }
+        } catch(e) {}
+        var result = {};
+        Object.keys(states).forEach(function(k) {
+          if (Object.keys(states[k]).length > 0) result[k] = states[k];
+        });
+        return result;
+      }
+
       function captureChildrenSummary(el) {
         var children = Array.from(el.children);
         var count = children.length;
@@ -291,7 +330,8 @@ public enum ElementInspectorBridge {
           cssVariables: cssVars.variables,
           cssVariableBindings: cssVars.bindings,
           children: captureChildrenSummary(el),
-          siblings: captureSiblings(el)
+          siblings: captureSiblings(el),
+          interactiveStates: captureInteractiveStates(el)
         };
       }
 
@@ -436,6 +476,17 @@ public enum ElementInspectorBridge {
       window.__elementInspector = { activate: activate, deactivate: deactivate, clearSelection: clearSelection };
     })();
     """
+
+  private static func parseInteractiveStates(from raw: Any?) -> [String: [String: String]] {
+    guard let dict = raw as? [String: Any] else { return [:] }
+    var result: [String: [String: String]] = [:]
+    for (state, value) in dict {
+      if let properties = value as? [String: String], !properties.isEmpty {
+        result[state] = properties
+      }
+    }
+    return result
+  }
 
   private static func parseRelationships(from raw: Any?) -> ElementRelationships {
     guard let dict = raw as? [String: Any],

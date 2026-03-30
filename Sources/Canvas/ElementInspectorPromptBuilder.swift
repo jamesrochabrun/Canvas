@@ -170,6 +170,17 @@ public enum ElementInspectorPromptBuilder {
       lines.append(contentsOf: element.siblings.items.map { summarize($0) })
     }
 
+    if !element.interactiveStates.isEmpty {
+      lines.append("**Interactive States**:")
+      for state in element.interactiveStates.keys.sorted() {
+        guard let properties = element.interactiveStates[state] else { continue }
+        lines.append("  :\(state)")
+        for (property, value) in properties.sorted(by: { $0.key < $1.key }) {
+          lines.append("    \(property): \(value)")
+        }
+      }
+    }
+
     return lines
   }
 

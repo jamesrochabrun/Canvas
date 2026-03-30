@@ -287,6 +287,7 @@ do {
 | `cssVariableBindings` | `[String: String]` | Maps CSS properties to their `var()` expressions (`"color"` → `"var(--primary)"`) |
 | `children` | `ElementRelationships` | Direct children summary (count + up to 10 items with tag, id, class, text) |
 | `siblings` | `ElementRelationships` | Sibling elements summary (excludes the selected element itself) |
+| `interactiveStates` | `[String: [String: String]]` | Pseudo-class styles: `"hover"` → `["background-color": "blue"]` |
 
 ### Captured Computed Styles
 
@@ -332,6 +333,22 @@ The prompt builder renders this as:
 **Siblings** (2):
   header.hero — "Welcome"
   footer — "© 2024"
+```
+
+### Interactive States
+
+The inspector captures styles from pseudo-class CSS rules (`:hover`, `:focus`, `:active`, `:focus-visible`, `:focus-within`, `:disabled`, `:checked`) that match the selected element. This enables AI models to edit interaction styles — e.g., when the user says "change the hover color," the AI knows the current hover styles.
+
+The prompt builder renders this as:
+
+```
+**Interactive States**:
+  :hover
+    background-color: rgb(37, 99, 235)
+    color: rgb(255, 255, 255)
+  :focus
+    outline: 2px solid rgb(37, 99, 235)
+    outline-offset: 2px
 ```
 
 ### Parent Context
