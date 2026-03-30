@@ -21,6 +21,7 @@ import WebKit
 public struct InspectableWebView: NSViewRepresentable {
   public let url: URL
   public let isFileURL: Bool
+  public let inspectorDataLevel: ElementInspectorDataLevel
   /// Directory to grant read access for file URLs (typically the project root)
   public let allowingReadAccessTo: URL?
   public var onLoadingChange: ((Bool) -> Void)?
@@ -43,6 +44,7 @@ public struct InspectableWebView: NSViewRepresentable {
   public init(
     url: URL,
     isFileURL: Bool,
+    inspectorDataLevel: ElementInspectorDataLevel = .regular,
     allowingReadAccessTo: URL? = nil,
     onLoadingChange: ((Bool) -> Void)? = nil,
     onURLChange: ((URL?) -> Void)? = nil,
@@ -56,6 +58,7 @@ public struct InspectableWebView: NSViewRepresentable {
   ) {
     self.url = url
     self.isFileURL = isFileURL
+    self.inspectorDataLevel = inspectorDataLevel
     self.allowingReadAccessTo = allowingReadAccessTo
     self.onLoadingChange = onLoadingChange
     self.onURLChange = onURLChange
@@ -75,7 +78,9 @@ public struct InspectableWebView: NSViewRepresentable {
     #endif
 
     // Element inspector — highlight on hover, capture element data on click
-    configuration.userContentController.addUserScript(ElementInspectorBridge.userScript)
+    configuration.userContentController.addUserScript(
+      ElementInspectorBridge.makeUserScript(for: inspectorDataLevel)
+    )
     ElementInspectorBridge.registerMessageHandler(
       on: configuration.userContentController,
       delegate: context.coordinator

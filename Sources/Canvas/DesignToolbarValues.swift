@@ -109,7 +109,7 @@ public enum DesignTextAlignment: String, Sendable, CaseIterable {
 
 /// Observable state for the inline design toolbar controls.
 ///
-/// Initialized from an element's `computedStyles` dictionary.
+/// Initialized from an element's normalized style snapshot.
 /// Each property change can be observed by the toolbar to emit `DesignEdit` events.
 @Observable @MainActor
 public final class DesignToolbarValues {
@@ -164,32 +164,32 @@ public final class DesignToolbarValues {
   // MARK: Init
 
   public init(element: ElementInspectorData) {
-    let styles = element.computedStyles
+    let styles = element.styles
     self.category = ElementCategory(tagName: element.tagName)
     self.textContent = element.textContent
 
-    self.fontFamily = Self.styleValue(styles, "fontFamily", "font-family") ?? "sans-serif"
-    self.color = Self.styleValue(styles, "color") ?? "rgb(0, 0, 0)"
-    self.backgroundColor = Self.styleValue(styles, "backgroundColor", "background-color") ?? "transparent"
+    self.fontFamily = styles.fontFamily ?? "sans-serif"
+    self.color = styles.textColor ?? "rgb(0, 0, 0)"
+    self.backgroundColor = styles.backgroundColor ?? "transparent"
 
-    let rawSize = Self.styleValue(styles, "fontSize", "font-size") ?? "16px"
+    let rawSize = styles.fontSize ?? "16px"
     self.fontSize = Self.parsePixelValue(rawSize) ?? 16
 
-    let rawWeight = Self.styleValue(styles, "fontWeight", "font-weight") ?? "400"
+    let rawWeight = styles.fontWeight ?? "400"
     self.isBold = Self.isBoldWeight(rawWeight)
 
-    let rawStyle = Self.styleValue(styles, "fontStyle", "font-style") ?? "normal"
+    let rawStyle = styles.fontStyle ?? "normal"
     self.isItalic = rawStyle.lowercased() == "italic"
 
-    let rawAlign = Self.styleValue(styles, "textAlign", "text-align") ?? "left"
+    let rawAlign = styles.textAlign ?? "left"
     self.textAlign = DesignTextAlignment(rawValue: rawAlign.lowercased()) ?? .left
 
-    self.letterSpacing = Self.styleValue(styles, "letterSpacing", "letter-spacing") ?? "normal"
-    self.lineHeight = Self.styleValue(styles, "lineHeight", "line-height") ?? "normal"
-    self.borderRadius = Self.styleValue(styles, "borderRadius", "border-radius") ?? "0px"
-    self.padding = Self.styleValue(styles, "padding") ?? "0px"
-    self.margin = Self.styleValue(styles, "margin") ?? "0px"
-    self.objectFit = Self.styleValue(styles, "objectFit", "object-fit") ?? "cover"
+    self.letterSpacing = styles.letterSpacing ?? "normal"
+    self.lineHeight = styles.lineHeight ?? "normal"
+    self.borderRadius = styles.borderRadius ?? "0px"
+    self.padding = styles.paddingShorthand ?? "0px"
+    self.margin = styles.marginShorthand ?? "0px"
+    self.objectFit = styles.objectFit ?? "cover"
   }
 
   // MARK: Parsing helpers (delegated to nonisolated CSSParser)

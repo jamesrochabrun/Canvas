@@ -15,13 +15,23 @@ import SwiftUI
 /// - Text/Button: font family, color, size, bold/italic, alignment, spacing
 /// - Image: border-radius, spacing
 /// - Container: background color, border-radius, padding
-struct DesignToolbarContent: View {
+public struct DesignToolbarContent: View {
 
   @Bindable var values: DesignToolbarValues
   let element: ElementInspectorData
   let onEdit: (DesignEdit) -> Void
 
-  var body: some View {
+  public init(
+    values: DesignToolbarValues,
+    element: ElementInspectorData,
+    onEdit: @escaping (DesignEdit) -> Void
+  ) {
+    self.values = values
+    self.element = element
+    self.onEdit = onEdit
+  }
+
+  public var body: some View {
     HStack(spacing: 2) {
       if values.category.supportsTextControls {
         textControls

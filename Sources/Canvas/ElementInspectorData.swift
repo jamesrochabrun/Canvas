@@ -68,6 +68,17 @@ public struct ElementInspectorData: Identifiable, Equatable, Sendable {
   /// Sibling elements summary (excludes the selected element itself).
   public let siblings: ElementRelationships
 
+  /// Typed accessors over the raw computed style capture.
+  public var styles: ElementComputedStyleSnapshot {
+    ElementComputedStyleSnapshot(rawStyles: computedStyles)
+  }
+
+  /// Structured parent layout context derived from `parentTagName` and `parentStyles`.
+  public var parentContext: ParentLayoutContext? {
+    let context = ParentLayoutContext(tagName: parentTagName, rawStyles: parentStyles)
+    return context.isEmpty ? nil : context
+  }
+
   public init(
     id: UUID = UUID(),
     tagName: String,
