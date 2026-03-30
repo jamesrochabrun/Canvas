@@ -8,6 +8,39 @@
 import CoreGraphics
 import Foundation
 
+/// Summary of a child or sibling element.
+public struct ElementSummary: Equatable, Sendable {
+  public let tagName: String
+  public let elementId: String
+  public let className: String
+  public let textContent: String
+
+  public init(
+    tagName: String,
+    elementId: String = "",
+    className: String = "",
+    textContent: String = ""
+  ) {
+    self.tagName = tagName
+    self.elementId = elementId
+    self.className = className
+    self.textContent = textContent
+  }
+}
+
+/// Summary of an element's children or siblings.
+public struct ElementRelationships: Equatable, Sendable {
+  /// Total count (may exceed `items.count` when capped at 10).
+  public let count: Int
+  /// Up to 10 summarized elements.
+  public let items: [ElementSummary]
+
+  public init(count: Int = 0, items: [ElementSummary] = []) {
+    self.count = count
+    self.items = items
+  }
+}
+
 /// DOM element data captured by the JS inspector bridge.
 public struct ElementInspectorData: Identifiable, Equatable, Sendable {
   public let id: UUID
@@ -34,6 +67,10 @@ public struct ElementInspectorData: Identifiable, Equatable, Sendable {
   public let cssVariables: [String: String]
   /// Maps CSS properties to their `var()` expressions (`"color"` → `"var(--primary)"`).
   public let cssVariableBindings: [String: String]
+  /// Direct children summary (tag, id, class, text for up to 10 children).
+  public let children: ElementRelationships
+  /// Sibling elements summary (excludes the selected element itself).
+  public let siblings: ElementRelationships
 
   public init(
     id: UUID = UUID(),
@@ -48,7 +85,9 @@ public struct ElementInspectorData: Identifiable, Equatable, Sendable {
     parentTagName: String = "",
     parentStyles: [String: String] = [:],
     cssVariables: [String: String] = [:],
-    cssVariableBindings: [String: String] = [:]
+    cssVariableBindings: [String: String] = [:],
+    children: ElementRelationships = ElementRelationships(),
+    siblings: ElementRelationships = ElementRelationships()
   ) {
     self.id = id
     self.tagName = tagName
@@ -63,5 +102,7 @@ public struct ElementInspectorData: Identifiable, Equatable, Sendable {
     self.parentStyles = parentStyles
     self.cssVariables = cssVariables
     self.cssVariableBindings = cssVariableBindings
+    self.children = children
+    self.siblings = siblings
   }
 }

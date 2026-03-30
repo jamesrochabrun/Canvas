@@ -160,6 +160,25 @@ public enum ElementInspectorPromptBuilder {
       lines.append(contentsOf: parentStyleEntries)
     }
 
+    if element.children.count > 0 {
+      lines.append("**Children** (\(element.children.count)):")
+      lines.append(contentsOf: element.children.items.map { summarize($0) })
+    }
+
+    if element.siblings.count > 0 {
+      lines.append("**Siblings** (\(element.siblings.count)):")
+      lines.append(contentsOf: element.siblings.items.map { summarize($0) })
+    }
+
     return lines
+  }
+
+  private static func summarize(_ item: ElementSummary) -> String {
+    var parts = [item.tagName.lowercased()]
+    if !item.elementId.isEmpty { parts.append("#\(item.elementId)") }
+    if !item.className.isEmpty { parts.append(".\(item.className.replacingOccurrences(of: " ", with: "."))") }
+    let label = parts.joined()
+    if item.textContent.isEmpty { return "  \(label)" }
+    return "  \(label) — \"\(item.textContent)\""
   }
 }

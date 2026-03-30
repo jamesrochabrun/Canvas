@@ -65,6 +65,8 @@ public enum ElementInspectorBridge {
     let parentStyles = parentContext?["styles"] as? [String: String] ?? [:]
     let cssVariables = body["cssVariables"] as? [String: String] ?? [:]
     let cssVariableBindings = body["cssVariableBindings"] as? [String: String] ?? [:]
+    let children = parseRelationships(from: body["children"])
+    let siblings = parseRelationships(from: body["siblings"])
     return ElementInspectorData(
       id: UUID(),
       tagName: body["tagName"] as? String ?? "",
@@ -78,7 +80,9 @@ public enum ElementInspectorBridge {
       parentTagName: parentTagName,
       parentStyles: parentStyles,
       cssVariables: cssVariables,
-      cssVariableBindings: cssVariableBindings
+      cssVariableBindings: cssVariableBindings,
+      children: children,
+      siblings: siblings
     )
   }
 
@@ -188,6 +192,42 @@ public enum ElementInspectorBridge {
         return { variables: variables, bindings: bindings };
       }
 
+      function captureChildrenSummary(el) {
+        var children = Array.from(el.children);
+        var count = children.length;
+        if (count === 0) return null;
+        var items = children.slice(0, 10).map(function(child) {
+          var entry = { tagName: child.tagName };
+          if (child.id) entry.id = child.id;
+          if (child.className && typeof child.className === 'string' && child.className.trim()) {
+            entry.className = child.className.trim().split(/\\s+/).slice(0, 3).join(' ');
+          }
+          var text = (child.textContent || '').trim();
+          if (text) entry.textContent = text.slice(0, 50);
+          return entry;
+        });
+        return { count: count, items: items };
+      }
+
+      function captureSiblings(el) {
+        var parent = el.parentElement;
+        if (!parent) return null;
+        var siblings = Array.from(parent.children).filter(function(s) { return s !== el; });
+        var count = siblings.length;
+        if (count === 0) return null;
+        var items = siblings.slice(0, 10).map(function(sib) {
+          var entry = { tagName: sib.tagName };
+          if (sib.id) entry.id = sib.id;
+          if (sib.className && typeof sib.className === 'string' && sib.className.trim()) {
+            entry.className = sib.className.trim().split(/\\s+/).slice(0, 3).join(' ');
+          }
+          var text = (sib.textContent || '').trim();
+          if (text) entry.textContent = text.slice(0, 50);
+          return entry;
+        });
+        return { count: count, items: items };
+      }
+
       function captureElementData(el) {
         var styles = window.getComputedStyle(el);
         var styleKeys = [
@@ -249,7 +289,9 @@ public enum ElementInspectorBridge {
           boundingRect: captureBoundingRect(el),
           parentContext: parentData,
           cssVariables: cssVars.variables,
-          cssVariableBindings: cssVars.bindings
+          cssVariableBindings: cssVars.bindings,
+          children: captureChildrenSummary(el),
+          siblings: captureSiblings(el)
         };
       }
 
@@ -394,6 +436,23 @@ public enum ElementInspectorBridge {
       window.__elementInspector = { activate: activate, deactivate: deactivate, clearSelection: clearSelection };
     })();
     """
+
+  private static func parseRelationships(from raw: Any?) -> ElementRelationships {
+    guard let dict = raw as? [String: Any],
+          let count = dict["count"] as? Int,
+          let rawItems = dict["items"] as? [[String: Any]] else {
+      return ElementRelationships()
+    }
+    let items = rawItems.map { item in
+      ElementSummary(
+        tagName: item["tagName"] as? String ?? "",
+        elementId: item["id"] as? String ?? "",
+        className: item["className"] as? String ?? "",
+        textContent: item["textContent"] as? String ?? ""
+      )
+    }
+    return ElementRelationships(count: count, items: items)
+  }
 
   private static func parseRect(from body: [String: Any]) -> CGRect {
     let rectDict = body["boundingRect"] as? [String: Double] ?? [:]

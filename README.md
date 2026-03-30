@@ -285,6 +285,8 @@ do {
 | `parentStyles` | `[String: String]` | Parent's layout-relevant styles (display, flex, grid, etc.) |
 | `cssVariables` | `[String: String]` | CSS custom properties used by this element (`"--primary"` → `"rgb(37,99,235)"`) |
 | `cssVariableBindings` | `[String: String]` | Maps CSS properties to their `var()` expressions (`"color"` → `"var(--primary)"`) |
+| `children` | `ElementRelationships` | Direct children summary (count + up to 10 items with tag, id, class, text) |
+| `siblings` | `ElementRelationships` | Sibling elements summary (excludes the selected element itself) |
 
 ### Captured Computed Styles
 
@@ -314,6 +316,22 @@ This lets AI models edit design tokens instead of hardcoding values. The prompt 
 **CSS Variables**:
   color uses var(--primary) = rgb(37, 99, 235)
   background-color uses var(--bg-surface) = rgb(255, 255, 255)
+```
+
+### Children & Siblings
+
+When an element is selected, the inspector captures summaries of its direct children and siblings (up to 10 each). Each summary includes the tag name, id, class, and text content. This enables AI models to reason about container-level edits like "add a fourth card," "reorder these items," or "make this one stand out from its siblings."
+
+The prompt builder renders this as:
+
+```
+**Children** (3):
+  div.card — "Authentic Recipes"
+  div.card — "Fresh Ingredients"
+  div.card — "Family Atmosphere"
+**Siblings** (2):
+  header.hero — "Welcome"
+  footer — "© 2024"
 ```
 
 ### Parent Context
