@@ -108,6 +108,17 @@ public enum ElementInspectorBridge {
     webView.evaluateJavaScript("window.__elementInspector?.clearSelection()") { _, _ in }
   }
 
+  /// Scrolls the page so the element matching the CSS selector is centered in view.
+  /// No-ops gracefully if the selector matches nothing.
+  public static func scrollToElement(selector: String, in webView: WKWebView) {
+    let escaped = selector
+      .replacingOccurrences(of: "\\", with: "\\\\")
+      .replacingOccurrences(of: "'", with: "\\'")
+    webView.evaluateJavaScript(
+      "window.__elementInspector?.scrollToAndSelect('\(escaped)')"
+    ) { _, _ in }
+  }
+
   // MARK: - Inspector JavaScript
 
   // swiftlint:disable:next function_body_length
@@ -320,7 +331,20 @@ public enum ElementInspectorBridge {
           selectedElement = null;
         }
 
-        window.__elementInspector = { activate: activate, deactivate: deactivate, clearSelection: clearSelection };
+        function scrollToAndSelect(selector) {
+          var el;
+          try { el = document.querySelector(selector); } catch(e) {}
+          if (!el) {
+            var simplified = selector.replace(/:[a-z-]+\\([^)]*\\)/g, '').replace(/\\.(?:visible|active|show|open|loaded|animated|entered|in-view)\\b/g, '').replace(/\\s*>\\s*>/g, ' > ').trim();
+            if (simplified && simplified !== selector) {
+              try { el = document.querySelector(simplified); } catch(e2) {}
+            }
+          }
+          if (!el) return;
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        window.__elementInspector = { activate: activate, deactivate: deactivate, clearSelection: clearSelection, scrollToAndSelect: scrollToAndSelect };
       })();
       """
 

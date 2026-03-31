@@ -37,6 +37,8 @@ public struct InspectableWebView: NSViewRepresentable {
   public var isInspectModeActive: Binding<Bool>?
   /// ID of the currently selected element; nil means no selection (clears JS lock)
   public var selectedElementId: UUID? = nil
+  /// CSS selector to scroll to and re-select after a reload completes.
+  public var selectorToRestore: String? = nil
   /// Called once when the underlying `WKWebView` is created.
   /// Store a weak reference to use with `ElementSnapshotCapture`.
   public var onWebViewReady: ((WKWebView) -> Void)?
@@ -54,6 +56,7 @@ public struct InspectableWebView: NSViewRepresentable {
     onSelectedElementViewportRectChange: ((CGRect) -> Void)? = nil,
     isInspectModeActive: Binding<Bool>? = nil,
     selectedElementId: UUID? = nil,
+    selectorToRestore: String? = nil,
     onWebViewReady: ((WKWebView) -> Void)? = nil
   ) {
     self.url = url
@@ -68,6 +71,7 @@ public struct InspectableWebView: NSViewRepresentable {
     self.onSelectedElementViewportRectChange = onSelectedElementViewportRectChange
     self.isInspectModeActive = isInspectModeActive
     self.selectedElementId = selectedElementId
+    self.selectorToRestore = selectorToRestore
     self.onWebViewReady = onWebViewReady
   }
 
@@ -98,6 +102,8 @@ public struct InspectableWebView: NSViewRepresentable {
   }
 
   public func updateNSView(_ webView: WKWebView, context: Context) {
+    context.coordinator.parent = self
+
     // Reload if URL or reload token changed
     if context.coordinator.lastLoadedURL != url || context.coordinator.lastReloadToken != reloadToken {
       loadContent(in: webView)
@@ -141,7 +147,7 @@ public struct InspectableWebView: NSViewRepresentable {
   // MARK: - Coordinator
 
   public class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
-    let parent: InspectableWebView
+    var parent: InspectableWebView
     var lastLoadedURL: URL?
     var lastReloadToken: UUID?
     var lastInspectModeState: Bool = false
@@ -170,6 +176,14 @@ public struct InspectableWebView: NSViewRepresentable {
       // Re-activate inspector after HMR/page reload if still active
       if parent.isInspectModeActive?.wrappedValue == true {
         ElementInspectorBridge.activate(in: webView)
+      }
+
+      // Restore selection by scrolling to the previously selected element
+      if let selector = parent.selectorToRestore, !selector.isEmpty {
+        Task { @MainActor in
+          try? await Task.sleep(for: .milliseconds(500))
+          ElementInspectorBridge.scrollToElement(selector: selector, in: webView)
+        }
       }
     }
 
