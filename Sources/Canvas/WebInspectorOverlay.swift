@@ -38,7 +38,7 @@ struct WebInspectorOverlayModifier: ViewModifier {
       if state.isActive, !state.isInputShowing {
         VStack {
           HStack(spacing: 6) {
-            Image(systemName: "cursorarrow.click.2")
+            Image(systemName: "cursorarrow.rays")
               .font(.system(size: 12))
               .foregroundColor(.white)
             Text(state.isContextMode
@@ -87,11 +87,13 @@ struct WebInspectorOverlayModifier: ViewModifier {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
           }
         }
+        .opacity(state.isReloading ? 0 : 1)
         .transition(.opacity.combined(with: .move(edge: .bottom)))
       }
     }
     .animation(.easeOut(duration: 0.2), value: state.isActive)
     .animation(.easeOut(duration: 0.15), value: state.selectedElement?.id)
+    .animation(.easeOut(duration: 0.2), value: state.isReloading)
     .onChange(of: state.selectedElement?.id) { _, newValue in
       guard newValue != nil,
             state.isContextMode,
