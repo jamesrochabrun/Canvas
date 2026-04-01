@@ -50,13 +50,20 @@ public struct WebInspectInputView: View {
         .stroke(Color(NSColor.separatorColor), lineWidth: 1)
     )
     .onAppear {
-      isFocused = true
+      requestFocus()
+    }
+    .onChange(of: element.id) { _, _ in
+      requestFocus()
+    }
+    .onDisappear {
+      focusTask?.cancel()
     }
   }
 
   // MARK: Private
 
   @State private var text = ""
+  @State private var focusTask: Task<Void, Never>?
   @FocusState private var isFocused: Bool
 
   private var elementSummary: some View {
@@ -198,6 +205,16 @@ public struct WebInspectInputView: View {
       return .handled
     default:
       return .ignored
+    }
+  }
+
+  private func requestFocus() {
+    focusTask?.cancel()
+    focusTask = Task { @MainActor in
+      isFocused = false
+      await Task.yield()
+      guard !Task.isCancelled else { return }
+      isFocused = true
     }
   }
 }
