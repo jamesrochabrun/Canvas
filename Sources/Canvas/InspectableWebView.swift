@@ -104,9 +104,14 @@ public struct InspectableWebView: NSViewRepresentable {
   public func updateNSView(_ webView: WKWebView, context: Context) {
     context.coordinator.parent = self
 
-    // Reload if URL or reload token changed
-    if context.coordinator.lastLoadedURL != url || context.coordinator.lastReloadToken != reloadToken {
+    let urlChanged = context.coordinator.lastLoadedURL != url
+    let tokenChanged = context.coordinator.lastReloadToken != reloadToken
+
+    if urlChanged {
       loadContent(in: webView)
+      context.coordinator.lastReloadToken = reloadToken
+    } else if tokenChanged {
+      webView.reload()
       context.coordinator.lastReloadToken = reloadToken
     }
 
