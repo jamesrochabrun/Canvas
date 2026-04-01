@@ -33,6 +33,9 @@ public final class ElementInspectState {
   /// The selected element's live bounding rect in viewport coordinates.
   public var selectedElementViewportRect: CGRect?
 
+  /// Whether the web content is reloading; the overlay reduces opacity to mask position shifts.
+  public var isReloading = false
+
   /// Whether the instruction input overlay is visible
   public var isInputShowing: Bool { selectedElement != nil }
 
