@@ -11,8 +11,8 @@ import SwiftUI
 
 /// Compact floating editor shown at the bottom of the web preview after an element is selected.
 ///
-/// Displays a compact element summary and a text field for the user to describe the change
-/// they want. Enter submits; Escape dismisses.
+/// Displays a semantic badge, element metadata, and a text field for the user to describe
+/// the change they want. Enter submits; Escape dismisses.
 public struct WebInspectInputView: View {
 
   // MARK: Lifecycle
@@ -34,22 +34,26 @@ public struct WebInspectInputView: View {
   let onDismiss: () -> Void
 
   public var body: some View {
-    VStack(alignment: .leading, spacing: 0) {
-      elementSummary
+    VStack(alignment: .leading, spacing: 8) {
+      semanticBadgeRow
 
-      Divider()
+      if !element.textContent.isEmpty {
+        textContentPreview
+      }
 
       inputRow
     }
-    .frame(maxWidth: .infinity)
+    .padding(12)
+    .frame(maxWidth: 520, alignment: .leading)
     .background(Color(NSColor.controlBackgroundColor))
-    .clipShape(RoundedRectangle(cornerRadius: 10))
-    .shadow(color: .black.opacity(0.25), radius: 10, x: 0, y: -4)
+    .clipShape(RoundedRectangle(cornerRadius: 16))
+    .shadow(color: .black.opacity(0.25), radius: 12, x: 0, y: -4)
     .overlay(
-      RoundedRectangle(cornerRadius: 10)
+      RoundedRectangle(cornerRadius: 16)
         .stroke(Color(NSColor.separatorColor), lineWidth: 1)
     )
-    .onAppear {
+    .task(id: element.id) {
+      try? await Task.sleep(for: .milliseconds(50))
       isFocused = true
     }
   }
@@ -59,20 +63,26 @@ public struct WebInspectInputView: View {
   @State private var text = ""
   @FocusState private var isFocused: Bool
 
-  private var elementSummary: some View {
-    HStack(spacing: 6) {
-      // Tag badge
-      Text(element.tagName.lowercased())
-        .font(.system(.caption2, design: .monospaced))
-        .foregroundColor(.white)
-        .padding(.horizontal, 6)
-        .padding(.vertical, 2)
-        .background(
-          RoundedRectangle(cornerRadius: 4)
-            .fill(Color.blue.opacity(0.8))
-        )
+  private var semanticLabel: ElementSemanticLabel {
+    ElementSemanticLabel(tagName: element.tagName)
+  }
 
-      // Selector
+  private var semanticBadgeRow: some View {
+    HStack(spacing: 6) {
+      HStack(spacing: 4) {
+        Image(systemName: semanticLabel.icon)
+          .font(.system(size: 10))
+        Text(semanticLabel.label)
+          .font(.system(size: 11, weight: .medium))
+      }
+      .foregroundColor(.white)
+      .padding(.horizontal, 8)
+      .padding(.vertical, 3)
+      .background(
+        Capsule()
+          .fill(badgeColor)
+      )
+
       Text(element.cssSelector)
         .font(.system(.caption2, design: .monospaced))
         .foregroundColor(.secondary)
@@ -80,29 +90,22 @@ public struct WebInspectInputView: View {
         .truncationMode(.middle)
 
       Spacer()
-
-      // Text preview (if any)
-      if !element.textContent.isEmpty {
-        Text("\"\(element.textContent)\"")
-          .font(.system(size: 11))
-          .foregroundColor(.secondary)
-          .lineLimit(1)
-          .truncationMode(.tail)
-          .frame(maxWidth: 140)
-      }
     }
-    .padding(.horizontal, 10)
-    .padding(.vertical, 7)
-    .background(Color(NSColor.windowBackgroundColor).opacity(0.6))
+  }
+
+  private var textContentPreview: some View {
+    Text("\"\(element.textContent)\"")
+      .font(.system(size: 11))
+      .foregroundColor(Color(NSColor.tertiaryLabelColor))
+      .lineLimit(1)
+      .truncationMode(.tail)
   }
 
   private var inputRow: some View {
-    HStack(spacing: 8) {
-      dismissButton
+    HStack(alignment: .bottom, spacing: 8) {
       textEditorView
       sendButton
     }
-    .padding(8)
   }
 
   private var textEditorView: some View {
@@ -112,66 +115,55 @@ public struct WebInspectInputView: View {
       .font(.system(size: 13))
       .lineLimit(1...3)
       .padding(.horizontal, 11)
-      .padding(.vertical, 10)
+      .padding(.vertical, 8)
       .onKeyPress { key in
         handleKeyPress(key)
       }
-    .background(
-      RoundedRectangle(cornerRadius: 8)
-        .fill(Color(NSColor.textBackgroundColor))
-    )
-    .overlay(
-      RoundedRectangle(cornerRadius: 8)
-        .stroke(
-          isFocused ? Color.accentColor.opacity(0.5) : Color(NSColor.separatorColor),
-          lineWidth: 1
-        )
-    )
-  }
-
-  private var dismissButton: some View {
-    Button(action: onDismiss) {
-      Image(systemName: "xmark")
-        .font(.system(size: 12))
-        .foregroundColor(.secondary)
-        .frame(width: 24, height: 24)
-        .contentShape(Rectangle())
-    }
-    .buttonStyle(.plain)
-    .frame(width: 24, height: 24)
-    .background(
-      RoundedRectangle(cornerRadius: 6)
-        .fill(Color(NSColor.controlBackgroundColor))
-    )
-    .overlay(
-      RoundedRectangle(cornerRadius: 6)
-        .stroke(Color(NSColor.separatorColor), lineWidth: 1)
-    )
-    .contentShape(Rectangle())
-    .help("Dismiss (Esc)")
+      .background(
+        RoundedRectangle(cornerRadius: 8)
+          .fill(Color(NSColor.textBackgroundColor))
+      )
+      .overlay(
+        RoundedRectangle(cornerRadius: 8)
+          .stroke(
+            isFocused ? Color.accentColor.opacity(0.5) : Color(NSColor.separatorColor),
+            lineWidth: 1
+          )
+      )
   }
 
   private var sendButton: some View {
     Button(action: submitMessage) {
       Image(systemName: "arrow.up")
-        .font(.system(size: 14))
+        .font(.system(size: 13, weight: .semibold))
         .foregroundColor(.white)
-        .frame(width: 32, height: 32)
-        .contentShape(Rectangle())
+        .frame(width: 28, height: 28)
+        .contentShape(Circle())
     }
     .buttonStyle(.plain)
-    .frame(width: 32, height: 32)
+    .frame(width: 28, height: 28)
     .background(
-      RoundedRectangle(cornerRadius: 8)
+      Circle()
         .fill(isTextEmpty ? Color.secondary.opacity(0.3) : Color.accentColor)
     )
-    .overlay(
-      RoundedRectangle(cornerRadius: 8)
-        .stroke(Color(NSColor.separatorColor), lineWidth: 1)
-    )
-    .contentShape(Rectangle())
+    .contentShape(Circle())
     .disabled(isTextEmpty)
     .help("Send to Claude (Enter)")
+  }
+
+  private var badgeColor: Color {
+    switch semanticLabel.badgeColor {
+    case .text:
+      Color.purple.opacity(0.8)
+    case .interactive:
+      Color.blue.opacity(0.8)
+    case .media:
+      Color.orange.opacity(0.8)
+    case .structural:
+      Color.gray.opacity(0.7)
+    case .data:
+      Color.teal.opacity(0.8)
+    }
   }
 
   private var isTextEmpty: Bool {
