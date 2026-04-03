@@ -52,15 +52,21 @@ public struct WebInspectInputView: View {
       RoundedRectangle(cornerRadius: 16)
         .stroke(Color(NSColor.separatorColor), lineWidth: 1)
     )
-    .task(id: element.id) {
-      try? await Task.sleep(for: .milliseconds(50))
-      isFocused = true
+    .onAppear {
+      requestFocus()
+    }
+    .onChange(of: element.id) { _, _ in
+      requestFocus()
+    }
+    .onDisappear {
+      focusTask?.cancel()
     }
   }
 
   // MARK: Private
 
   @State private var text = ""
+  @State private var focusTask: Task<Void, Never>?
   @FocusState private var isFocused: Bool
 
   private var semanticLabel: ElementSemanticLabel {
@@ -190,6 +196,16 @@ public struct WebInspectInputView: View {
       return .handled
     default:
       return .ignored
+    }
+  }
+
+  private func requestFocus() {
+    focusTask?.cancel()
+    focusTask = Task { @MainActor in
+      isFocused = false
+      await Task.yield()
+      guard !Task.isCancelled else { return }
+      isFocused = true
     }
   }
 }
