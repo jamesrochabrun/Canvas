@@ -51,7 +51,7 @@ struct WebInspectCropInputOverlay: View {
       elementCount: state.cropElements.count,
       onSubmit: { instruction in
         onSubmit?(cropRect, state.cropElements, instruction)
-        state.dismissCropRect()
+        state.deactivate()
       },
       onDismiss: {
         state.dismissCropRect()
