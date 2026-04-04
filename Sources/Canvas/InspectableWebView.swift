@@ -35,6 +35,8 @@ public struct InspectableWebView: NSViewRepresentable {
   public var onSelectedElementViewportRectChange: ((CGRect) -> Void)?
   /// Called when the user finishes dragging a crop rectangle, with the elements found within it.
   public var onCropRectSelected: ((CGRect, [ElementInspectorData]) -> Void)?
+  /// Called when the crop rectangle's viewport position changes due to scrolling or resizing.
+  public var onCropRectViewportChange: ((CGRect) -> Void)?
   /// Binding controlling whether the JS inspector overlay is active
   public var isInspectModeActive: Binding<Bool>?
   /// The current inspect mode, used to choose between element and crop activation in JS.
@@ -59,6 +61,7 @@ public struct InspectableWebView: NSViewRepresentable {
     onElementSelected: ((ElementInspectorData) -> Void)? = nil,
     onSelectedElementViewportRectChange: ((CGRect) -> Void)? = nil,
     onCropRectSelected: ((CGRect, [ElementInspectorData]) -> Void)? = nil,
+    onCropRectViewportChange: ((CGRect) -> Void)? = nil,
     isInspectModeActive: Binding<Bool>? = nil,
     inspectMode: InspectMode = .input,
     selectedElementId: UUID? = nil,
@@ -76,6 +79,7 @@ public struct InspectableWebView: NSViewRepresentable {
     self.onElementSelected = onElementSelected
     self.onSelectedElementViewportRectChange = onSelectedElementViewportRectChange
     self.onCropRectSelected = onCropRectSelected
+    self.onCropRectViewportChange = onCropRectViewportChange
     self.isInspectModeActive = isInspectModeActive
     self.inspectMode = inspectMode
     self.selectedElementId = selectedElementId
@@ -264,6 +268,13 @@ public struct InspectableWebView: NSViewRepresentable {
           let (rect, elements) = ElementInspectorBridge.parseCropData(body)
           Task { @MainActor in
             parent.onCropRectSelected?(rect, elements)
+          }
+          return
+
+        case "cropRectUpdate":
+          let rect = ElementInspectorBridge.parseCropRect(body)
+          Task { @MainActor in
+            parent.onCropRectViewportChange?(rect)
           }
           return
 

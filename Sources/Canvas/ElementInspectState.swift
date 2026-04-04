@@ -83,6 +83,14 @@ public final class ElementInspectState {
     cropElements = elements
   }
 
+  /// Updates the crop rectangle's viewport position without clearing captured elements.
+  ///
+  /// Called on scroll/resize to keep the crop overlay anchored to content.
+  public func updateCropRect(_ rect: CGRect) {
+    guard cropRect != nil else { return }
+    cropRect = rect
+  }
+
   /// Updates the selected element's viewport rect without replacing the selection.
   public func updateSelectedElementViewportRect(_ rect: CGRect) {
     guard selectedElement != nil else { return }

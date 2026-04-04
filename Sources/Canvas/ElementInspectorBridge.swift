@@ -378,6 +378,11 @@ public enum ElementInspectorBridge {
         var cropStartX = 0;
         var cropStartY = 0;
         var isCropDragging = false;
+        var cropDocX = 0;
+        var cropDocY = 0;
+        var cropWidth = 0;
+        var cropHeight = 0;
+        var cropRectFrame = null;
 
         function rectIntersectionArea(a, b) {
           var x1 = Math.max(a.x, b.x);
@@ -448,6 +453,48 @@ public enum ElementInspectorBridge {
           return filtered.slice(0, 20).map(function(c) { return c.el; });
         }
 
+        function postCropRectUpdate() {
+          var vx = cropDocX - window.scrollX;
+          var vy = cropDocY - window.scrollY;
+          try {
+            window.webkit.messageHandlers.elementInspector.postMessage({
+              type: 'cropRectUpdate',
+              boundingRect: { x: vx, y: vy, width: cropWidth, height: cropHeight }
+            });
+          } catch(err) {}
+        }
+
+        function scheduleCropRectPost() {
+          if (cropRectFrame !== null) return;
+          cropRectFrame = window.requestAnimationFrame(function() {
+            cropRectFrame = null;
+            postCropRectUpdate();
+          });
+        }
+
+        function onCropScroll() {
+          if (!cropOverlay || cropOverlay.style.display === 'none') return;
+          var vx = cropDocX - window.scrollX;
+          var vy = cropDocY - window.scrollY;
+          cropOverlay.style.left = vx + 'px';
+          cropOverlay.style.top = vy + 'px';
+          scheduleCropRectPost();
+        }
+
+        function onCropResize() {
+          if (!cropOverlay || cropOverlay.style.display === 'none') return;
+          scheduleCropRectPost();
+        }
+
+        function removeCropScrollListeners() {
+          window.removeEventListener('scroll', onCropScroll, true);
+          window.removeEventListener('resize', onCropResize);
+          if (cropRectFrame !== null) {
+            window.cancelAnimationFrame(cropRectFrame);
+            cropRectFrame = null;
+          }
+        }
+
         function createCropOverlay() {
           if (cropOverlay) return;
           cropOverlay = document.createElement('div');
@@ -502,6 +549,12 @@ public enum ElementInspectorBridge {
           var w = Math.abs(e.clientX - cropStartX);
           var h = Math.abs(e.clientY - cropStartY);
           if (w > 5 && h > 5) {
+            cropDocX = x + window.scrollX;
+            cropDocY = y + window.scrollY;
+            cropWidth = w;
+            cropHeight = h;
+            window.addEventListener('scroll', onCropScroll, { capture: true, passive: true });
+            window.addEventListener('resize', onCropResize, { passive: true });
             var elementsInRect = findElementsInRect(x, y, w, h);
             var elementDataArray = elementsInRect.map(function(el) {
               return captureElementData(el);
@@ -535,6 +588,7 @@ public enum ElementInspectorBridge {
           document.removeEventListener('mousedown', onCropMouseDown, true);
           document.removeEventListener('mousemove', onCropMouseMove, true);
           document.removeEventListener('mouseup', onCropMouseUp, true);
+          removeCropScrollListeners();
           document.body.style.cursor = '';
           if (cropOverlay) {
             cropOverlay.style.display = 'none';
@@ -543,6 +597,7 @@ public enum ElementInspectorBridge {
 
         function clearCropSelection() {
           isCropDragging = false;
+          removeCropScrollListeners();
           if (cropOverlay) {
             cropOverlay.style.display = 'none';
           }
