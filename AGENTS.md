@@ -40,14 +40,26 @@ The data flow is:
 ```
 JS click → WKScriptMessageHandler → ElementInspectorBridge.parseElementData()
   → ElementInspectState.selectElement() → WebInspectorOverlay shows UI
-  → onSubmit / onContextSelection callback → ElementInspectorPromptBuilder
+  → onSubmit / onContextSelection / onCropSubmit callback → ElementInspectorPromptBuilder
 ```
+
+Crop mode flow:
+
+```
+JS drag → onCropMouseUp → findElementsInRect() (overlap scoring + ancestor dedup)
+  → postMessage('cropRect') → ElementInspectState.selectCropRect()
+  → WebInspectCropInputOverlay shows UI (anchored below crop rect)
+  → onCropSubmit callback → ElementInspectorPromptBuilder.buildCropPrompt()
+```
+
+On scroll after crop: JS tracks document-relative coordinates and posts `cropRectUpdate` messages to reposition the overlay.
 
 - **State changes** go in `ElementInspectState`.
 - **Capture level selection** goes in `ElementInspectorDataLevel`.
 - **JS behavior** goes in `ElementInspectorBridge` (generated via `makeUserScript(for:)`).
-- **Parsing** goes in `ElementInspectorBridge.parseElementData()`.
-- **UI** goes in `WebInspectInputView`, `WebInspectContextView`, or `WebInspectorOverlay`.
+- **Parsing** goes in `ElementInspectorBridge.parseElementData()` / `parseCropData()`.
+- **UI** goes in `WebInspectInputView`, `WebInspectContextView`, `WebInspectCropInputView`, or `WebInspectorOverlay`.
+- **Crop input positioning** goes in `WebInspectCropInputOverlay` (uses `WebInspectInputLayoutResolver`).
 - **Prompt formatting** goes in `ElementInspectorPromptBuilder`.
 - **Typed computed style access** goes in `ElementComputedStyleSnapshot`.
 - **Parent layout context** goes in `ParentLayoutContext`.
@@ -99,6 +111,9 @@ let image = try await ElementSnapshotCapture.captureSnapshot(of: rect, in: webVi
 
 // Convenience: snapshot the currently selected element via state
 let image = try await inspectState.captureSelectedElementSnapshot(in: webView)
+
+// Convenience: snapshot the current crop rectangle via state
+let image = try await inspectState.captureCropSnapshot(in: webView)
 ```
 
 To obtain the `WKWebView` reference, use the `onWebViewReady` callback on `InspectableWebView`:

@@ -89,7 +89,7 @@ struct ContentView: View {
 
 ## Inspect Modes
 
-Canvas supports two interaction modes.
+Canvas supports three interaction modes.
 
 ### Input Mode
 
@@ -124,6 +124,29 @@ inspectState.activate(mode: .context)
   }
 )
 ```
+
+### Crop Mode
+
+The user drags to select a rectangular region. Elements within the crop are scored by overlap ratio (30% minimum), deduplicated to prefer leaf nodes over ancestors, and sent with the region dimensions. The crop rectangle and input follow page scrolling.
+
+```swift
+inspectState.activate(mode: .crop)
+
+.webInspectorOverlay(
+  state: inspectState,
+  onCropSubmit: { rect, elements, instruction in
+    let prompt = ElementInspectorPromptBuilder.buildCropPrompt(
+      cropRect: rect,
+      elements: elements,
+      instruction: instruction,
+      screenshotPath: savedScreenshotPath
+    )
+    sendToAgent(prompt)
+  }
+)
+```
+
+When no leaf elements pass the overlap threshold (e.g., cropping empty spacing), Canvas falls back to the tightest ancestor containing the crop rect.
 
 ## Inspector Payload Levels
 
@@ -266,7 +289,7 @@ case .deleteElement:
 | Type | Description |
 |------|-------------|
 | `ElementInspectState` | Observable state machine controlling inspect lifecycle |
-| `InspectMode` | `.input` or `.context` |
+| `InspectMode` | `.input`, `.context`, or `.crop` |
 | `InspectableWebView` | `NSViewRepresentable` wrapping `WKWebView` with inspector support |
 | `ElementInspectorDataLevel` | Controls compact vs rich capture |
 | `ElementInspectorData` | Immutable snapshot of a selected DOM element |

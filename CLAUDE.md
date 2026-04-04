@@ -26,6 +26,9 @@ Sources/Canvas/
   InspectableWebView.swift            — NSViewRepresentable wrapping WKWebView
   WebInspectInputView.swift           — Floating text-input overlay (input mode)
   WebInspectContextView.swift         — Read-only element summary (context mode)
+  WebInspectCropInputView.swift       — Floating text-input overlay (crop mode)
+  WebInspectCropInputOverlay.swift    — Crop input positioning (anchored below crop rect)
+  WebInspectInputLayoutResolver.swift — Pure layout logic for anchoring input to element/crop rect
   WebInspectorOverlay.swift           — ViewModifier combining banner + overlays
   ElementInspectorPromptBuilder.swift — Structured prompt construction
   DesignEdit.swift                    — Structured design edit events
@@ -137,10 +140,18 @@ struct SomeTests {
 - One test file per source type
 - `// MARK: -` sections to group related tests
 
-## Two Inspector Modes
+## Three Inspector Modes
 
 - **Input mode** (`.input`): select element → type instruction → submit via `onSubmit`
 - **Context mode** (`.context`): select element → data sent immediately via `onContextSelection` → auto-dismiss
+- **Crop mode** (`.crop`): drag to select region → elements scored by overlap ratio (30% min) → ancestor dedup → type instruction → submit via `onCropSubmit` → inspect mode deactivates
+
+Crop mode features:
+- Overlap scoring filters out containers barely clipped by the crop rect
+- Ancestor dedup keeps leaf elements, drops redundant parents
+- Empty region fallback walks up from center to find the tightest containing ancestor
+- Scroll tracking repositions the JS overlay and SwiftUI input on scroll/resize
+- `buildCropPrompt` accepts optional `screenshotPath` for visual context
 
 ## Documentation
 
