@@ -123,6 +123,49 @@ public enum ElementInspectorPromptBuilder {
     return lines.joined(separator: "\n")
   }
 
+  /// Constructs a prompt for a crop-selected region with the elements found within it.
+  ///
+  /// Used in crop mode where the user draws a rectangle instead of clicking an element.
+  /// Includes the HTML/CSS context of all elements within the region so the agent
+  /// knows what code to modify.
+  public static func buildCropPrompt(
+    cropRect: CGRect,
+    elements: [ElementInspectorData],
+    instruction: String,
+    screenshotPath: String? = nil
+  ) -> String {
+    var lines = [
+      "I'm looking at a selected region in the live web preview:",
+      "",
+      "**Region**: \(Int(cropRect.width))px \u{00d7} \(Int(cropRect.height))px at (\(Int(cropRect.origin.x)), \(Int(cropRect.origin.y)))",
+      "",
+    ]
+
+    if let path = screenshotPath {
+      lines.append("**Screenshot**: \(path)")
+      lines.append("")
+    }
+
+    if !elements.isEmpty {
+      lines.append("**Elements in region** (\(elements.count)):")
+      lines.append("")
+      for (index, element) in elements.enumerated() {
+        lines.append("### Element \(index + 1)")
+        lines.append(contentsOf: elementLines(for: element))
+        if index < elements.count - 1 {
+          lines.append("")
+        }
+      }
+      lines.append("")
+    }
+
+    lines.append("User request: \(instruction)")
+    lines.append("")
+    lines.append("Please modify the source code to make this change.")
+
+    return lines.joined(separator: "\n")
+  }
+
   private static func elementLines(for element: ElementInspectorData) -> [String] {
     var lines = [
       "**Element**: \(element.outerHTML.isEmpty ? element.tagName.lowercased() : element.outerHTML)",

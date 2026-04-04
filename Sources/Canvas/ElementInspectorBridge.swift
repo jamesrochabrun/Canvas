@@ -93,6 +93,19 @@ public enum ElementInspectorBridge {
     parseRect(from: body)
   }
 
+  /// Parses the crop rectangle from a `cropRect` message.
+  public static func parseCropRect(_ body: [String: Any]) -> CGRect {
+    parseRect(from: body)
+  }
+
+  /// Parses crop data including the rectangle and all elements within it.
+  public static func parseCropData(_ body: [String: Any]) -> (CGRect, [ElementInspectorData]) {
+    let rect = parseRect(from: body)
+    let rawElements = body["elements"] as? [[String: Any]] ?? []
+    let elements = rawElements.map { parseElementData($0) }
+    return (rect, elements)
+  }
+
   /// Activates the inspector overlay in the web view.
   public static func activate(in webView: WKWebView) {
     webView.evaluateJavaScript("window.__elementInspector?.activate()") { _, _ in }
@@ -106,6 +119,21 @@ public enum ElementInspectorBridge {
   /// Clears the current selection so hover-following resumes.
   public static func clearSelection(in webView: WKWebView) {
     webView.evaluateJavaScript("window.__elementInspector?.clearSelection()") { _, _ in }
+  }
+
+  /// Activates crop mode (drag-to-select) in the web view.
+  public static func activateCrop(in webView: WKWebView) {
+    webView.evaluateJavaScript("window.__elementInspector?.activateCrop()") { _, _ in }
+  }
+
+  /// Deactivates crop mode in the web view.
+  public static func deactivateCrop(in webView: WKWebView) {
+    webView.evaluateJavaScript("window.__elementInspector?.deactivateCrop()") { _, _ in }
+  }
+
+  /// Clears the current crop selection so the user can draw a new one.
+  public static func clearCropSelection(in webView: WKWebView) {
+    webView.evaluateJavaScript("window.__elementInspector?.clearCropSelection()") { _, _ in }
   }
 
   /// Scrolls the page so the element matching the CSS selector is centered in view.
@@ -344,7 +372,238 @@ public enum ElementInspectorBridge {
           el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
 
-        window.__elementInspector = { activate: activate, deactivate: deactivate, clearSelection: clearSelection, scrollToAndSelect: scrollToAndSelect };
+        // --- Crop mode (drag-to-select region) ---
+        var cropModeActive = false;
+        var cropOverlay = null;
+        var cropStartX = 0;
+        var cropStartY = 0;
+        var isCropDragging = false;
+        var cropDocX = 0;
+        var cropDocY = 0;
+        var cropWidth = 0;
+        var cropHeight = 0;
+        var cropRectFrame = null;
+
+        function rectIntersectionArea(a, b) {
+          var x1 = Math.max(a.x, b.x);
+          var y1 = Math.max(a.y, b.y);
+          var x2 = Math.min(a.x + a.width, b.x + b.width);
+          var y2 = Math.min(a.y + a.height, b.y + b.height);
+          if (x2 <= x1 || y2 <= y1) return 0;
+          return (x2 - x1) * (y2 - y1);
+        }
+
+        function findElementsInRect(cx, cy, cw, ch) {
+          var crop = { x: cx, y: cy, width: cw, height: ch };
+          var skipTags = { SCRIPT:1, STYLE:1, HEAD:1, META:1, LINK:1, BR:1, NOSCRIPT:1 };
+          var candidates = [];
+          var all = document.body.querySelectorAll('*');
+
+          for (var i = 0; i < all.length; i++) {
+            var el = all[i];
+            if (el === cropOverlay) continue;
+            if (skipTags[el.tagName]) continue;
+            var s = window.getComputedStyle(el);
+            if (s.display === 'none' || s.visibility === 'hidden') continue;
+            var r = el.getBoundingClientRect();
+            if (r.width === 0 || r.height === 0) continue;
+            var elRect = { x: r.x, y: r.y, width: r.width, height: r.height };
+            var overlap = rectIntersectionArea(crop, elRect);
+            if (overlap === 0) continue;
+            var elArea = r.width * r.height;
+            var overlapRatio = overlap / elArea;
+            if (overlapRatio < 0.3) continue;
+            candidates.push({ el: el, overlapRatio: overlapRatio, area: elArea });
+          }
+
+          var filtered = candidates.filter(function(c) {
+            for (var j = 0; j < candidates.length; j++) {
+              if (candidates[j].el !== c.el && c.el.contains(candidates[j].el)) {
+                return false;
+              }
+            }
+            return true;
+          });
+
+          if (filtered.length === 0) {
+            var centerEl = document.elementFromPoint(cx + cw / 2, cy + ch / 2);
+            var ancestor = centerEl;
+            while (ancestor && ancestor !== document.body && ancestor !== document.documentElement) {
+              if (ancestor === cropOverlay) { ancestor = ancestor.parentElement; continue; }
+              if (skipTags[ancestor.tagName]) { ancestor = ancestor.parentElement; continue; }
+              var ar = ancestor.getBoundingClientRect();
+              if (ar.x <= cx && ar.y <= cy &&
+                  ar.x + ar.width >= cx + cw &&
+                  ar.y + ar.height >= cy + ch) {
+                return [ancestor];
+              }
+              ancestor = ancestor.parentElement;
+            }
+            if (centerEl && centerEl !== cropOverlay && centerEl !== document.body) {
+              return [centerEl];
+            }
+            return [];
+          }
+
+          filtered.sort(function(a, b) {
+            if (b.overlapRatio !== a.overlapRatio) return b.overlapRatio - a.overlapRatio;
+            return a.area - b.area;
+          });
+
+          return filtered.slice(0, 20).map(function(c) { return c.el; });
+        }
+
+        function postCropRectUpdate() {
+          var vx = cropDocX - window.scrollX;
+          var vy = cropDocY - window.scrollY;
+          try {
+            window.webkit.messageHandlers.elementInspector.postMessage({
+              type: 'cropRectUpdate',
+              boundingRect: { x: vx, y: vy, width: cropWidth, height: cropHeight }
+            });
+          } catch(err) {}
+        }
+
+        function scheduleCropRectPost() {
+          if (cropRectFrame !== null) return;
+          cropRectFrame = window.requestAnimationFrame(function() {
+            cropRectFrame = null;
+            postCropRectUpdate();
+          });
+        }
+
+        function onCropScroll() {
+          if (!cropOverlay || cropOverlay.style.display === 'none') return;
+          var vx = cropDocX - window.scrollX;
+          var vy = cropDocY - window.scrollY;
+          cropOverlay.style.left = vx + 'px';
+          cropOverlay.style.top = vy + 'px';
+          scheduleCropRectPost();
+        }
+
+        function onCropResize() {
+          if (!cropOverlay || cropOverlay.style.display === 'none') return;
+          scheduleCropRectPost();
+        }
+
+        function removeCropScrollListeners() {
+          window.removeEventListener('scroll', onCropScroll, true);
+          window.removeEventListener('resize', onCropResize);
+          if (cropRectFrame !== null) {
+            window.cancelAnimationFrame(cropRectFrame);
+            cropRectFrame = null;
+          }
+        }
+
+        function createCropOverlay() {
+          if (cropOverlay) return;
+          cropOverlay = document.createElement('div');
+          cropOverlay.style.cssText = [
+            'position:fixed',
+            'pointer-events:none',
+            'z-index:2147483647',
+            'box-sizing:border-box',
+            'border:2px dashed rgba(255,160,80,0.9)',
+            'background:rgba(255,160,80,0.06)',
+            'border-radius:3px',
+            'display:none'
+          ].join(';');
+          document.body.appendChild(cropOverlay);
+        }
+
+        function onCropMouseDown(e) {
+          if (!cropModeActive) return;
+          e.preventDefault();
+          e.stopPropagation();
+          isCropDragging = true;
+          cropStartX = e.clientX;
+          cropStartY = e.clientY;
+          createCropOverlay();
+          cropOverlay.style.left = cropStartX + 'px';
+          cropOverlay.style.top = cropStartY + 'px';
+          cropOverlay.style.width = '0px';
+          cropOverlay.style.height = '0px';
+          cropOverlay.style.display = 'block';
+        }
+
+        function onCropMouseMove(e) {
+          if (!cropModeActive || !isCropDragging) return;
+          e.preventDefault();
+          var x = Math.min(e.clientX, cropStartX);
+          var y = Math.min(e.clientY, cropStartY);
+          var w = Math.abs(e.clientX - cropStartX);
+          var h = Math.abs(e.clientY - cropStartY);
+          cropOverlay.style.left = x + 'px';
+          cropOverlay.style.top = y + 'px';
+          cropOverlay.style.width = w + 'px';
+          cropOverlay.style.height = h + 'px';
+        }
+
+        function onCropMouseUp(e) {
+          if (!cropModeActive || !isCropDragging) return;
+          e.preventDefault();
+          e.stopPropagation();
+          isCropDragging = false;
+          var x = Math.min(e.clientX, cropStartX);
+          var y = Math.min(e.clientY, cropStartY);
+          var w = Math.abs(e.clientX - cropStartX);
+          var h = Math.abs(e.clientY - cropStartY);
+          if (w > 5 && h > 5) {
+            cropDocX = x + window.scrollX;
+            cropDocY = y + window.scrollY;
+            cropWidth = w;
+            cropHeight = h;
+            window.addEventListener('scroll', onCropScroll, { capture: true, passive: true });
+            window.addEventListener('resize', onCropResize, { passive: true });
+            var elementsInRect = findElementsInRect(x, y, w, h);
+            var elementDataArray = elementsInRect.map(function(el) {
+              return captureElementData(el);
+            });
+            try {
+              window.webkit.messageHandlers.elementInspector.postMessage({
+                type: 'cropRect',
+                boundingRect: { x: x, y: y, width: w, height: h },
+                elements: elementDataArray
+              });
+            } catch(err) {}
+          } else {
+            if (cropOverlay) cropOverlay.style.display = 'none';
+          }
+        }
+
+        function activateCrop() {
+          if (cropModeActive) return;
+          cropModeActive = true;
+          createCropOverlay();
+          document.addEventListener('mousedown', onCropMouseDown, true);
+          document.addEventListener('mousemove', onCropMouseMove, true);
+          document.addEventListener('mouseup', onCropMouseUp, true);
+          document.body.style.cursor = 'crosshair';
+        }
+
+        function deactivateCrop() {
+          if (!cropModeActive) return;
+          cropModeActive = false;
+          isCropDragging = false;
+          document.removeEventListener('mousedown', onCropMouseDown, true);
+          document.removeEventListener('mousemove', onCropMouseMove, true);
+          document.removeEventListener('mouseup', onCropMouseUp, true);
+          removeCropScrollListeners();
+          document.body.style.cursor = '';
+          if (cropOverlay) {
+            cropOverlay.style.display = 'none';
+          }
+        }
+
+        function clearCropSelection() {
+          isCropDragging = false;
+          removeCropScrollListeners();
+          if (cropOverlay) {
+            cropOverlay.style.display = 'none';
+          }
+        }
+
+        window.__elementInspector = { activate: activate, deactivate: deactivate, clearSelection: clearSelection, scrollToAndSelect: scrollToAndSelect, activateCrop: activateCrop, deactivateCrop: deactivateCrop, clearCropSelection: clearCropSelection };
       })();
       """
 

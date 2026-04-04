@@ -9,11 +9,13 @@ import SwiftUI
 import WebKit
 
 /// The inspector interaction mode.
-public enum InspectMode: Sendable {
+public enum InspectMode: Sendable, Equatable {
   /// User types an instruction before sending (default).
   case input
   /// Element context is sent immediately on selection.
   case context
+  /// User drags to select a rectangular region.
+  case crop
 }
 
 /// Observable state controlling the web element inspector lifecycle.
@@ -33,14 +35,26 @@ public final class ElementInspectState {
   /// The selected element's live bounding rect in viewport coordinates.
   public var selectedElementViewportRect: CGRect?
 
+  /// The user-drawn crop rectangle in viewport coordinates.
+  public var cropRect: CGRect?
+
+  /// Elements found within the crop rectangle.
+  public var cropElements: [ElementInspectorData] = []
+
   /// Whether the web content is reloading; the overlay reduces opacity to mask position shifts.
   public var isReloading = false
 
   /// Whether the instruction input overlay is visible
   public var isInputShowing: Bool { selectedElement != nil }
 
+  /// Whether the crop input overlay is visible
+  public var isCropInputShowing: Bool { cropRect != nil }
+
   /// Convenience check for context mode.
   public var isContextMode: Bool { mode == .context }
+
+  /// Convenience check for crop mode.
+  public var isCropMode: Bool { mode == .crop }
 
   public init() {}
 
@@ -63,6 +77,20 @@ public final class ElementInspectState {
     selectedElementViewportRect = element.boundingRect
   }
 
+  /// Records the user-drawn crop rectangle and the elements within it.
+  public func selectCropRect(_ rect: CGRect, elements: [ElementInspectorData] = []) {
+    cropRect = rect
+    cropElements = elements
+  }
+
+  /// Updates the crop rectangle's viewport position without clearing captured elements.
+  ///
+  /// Called on scroll/resize to keep the crop overlay anchored to content.
+  public func updateCropRect(_ rect: CGRect) {
+    guard cropRect != nil else { return }
+    cropRect = rect
+  }
+
   /// Updates the selected element's viewport rect without replacing the selection.
   public func updateSelectedElementViewportRect(_ rect: CGRect) {
     guard selectedElement != nil else { return }
@@ -72,6 +100,12 @@ public final class ElementInspectState {
   /// Dismisses the input overlay without deactivating inspect mode.
   public func dismissInput() {
     clearSelection()
+  }
+
+  /// Dismisses the crop rectangle without deactivating inspect mode.
+  public func dismissCropRect() {
+    cropRect = nil
+    cropElements = []
   }
 
   /// Captures a snapshot of the currently selected element.
@@ -90,8 +124,23 @@ public final class ElementInspectState {
     return try await ElementSnapshotCapture.captureSnapshot(of: rect, in: webView)
   }
 
+  /// Captures a snapshot of the user-drawn crop rectangle.
+  ///
+  /// - Parameter webView: The `WKWebView` displaying the content.
+  /// - Returns: An `NSImage` cropped to the crop rect.
+  public func captureCropSnapshot(
+    in webView: WKWebView
+  ) async throws -> NSImage {
+    guard let rect = cropRect else {
+      throw SnapshotError.zeroRect
+    }
+    return try await ElementSnapshotCapture.captureSnapshot(of: rect, in: webView)
+  }
+
   private func clearSelection() {
     selectedElement = nil
     selectedElementViewportRect = nil
+    cropRect = nil
+    cropElements = []
   }
 }

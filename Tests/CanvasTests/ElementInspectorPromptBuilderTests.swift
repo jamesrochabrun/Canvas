@@ -1,3 +1,4 @@
+import CoreGraphics
 import Testing
 @testable import Canvas
 
@@ -189,5 +190,82 @@ struct ElementInspectorPromptBuilderTests {
     #expect(prompt.contains(".hero button"))
     #expect(prompt.contains(".pricing"))
     #expect(!prompt.contains("User request"))
+  }
+
+  // MARK: - Crop Prompt
+
+  @Test func cropPromptIncludesRegionDimensions() {
+    let rect = CGRect(x: 84, y: 424, width: 430, height: 130)
+    let prompt = ElementInspectorPromptBuilder.buildCropPrompt(
+      cropRect: rect,
+      elements: [],
+      instruction: "what is this?"
+    )
+    #expect(prompt.contains("**Region**: 430px \u{00d7} 130px at (84, 424)"))
+  }
+
+  @Test func cropPromptWithZeroElementsOmitsElementsSection() {
+    let rect = CGRect(x: 0, y: 0, width: 200, height: 100)
+    let prompt = ElementInspectorPromptBuilder.buildCropPrompt(
+      cropRect: rect,
+      elements: [],
+      instruction: "describe this"
+    )
+    #expect(!prompt.contains("**Elements in region**"))
+    #expect(prompt.contains("User request: describe this"))
+    #expect(prompt.contains("Please modify the source code to make this change."))
+  }
+
+  @Test func cropPromptWithElementsIncludesElementsSection() {
+    let rect = CGRect(x: 10, y: 20, width: 300, height: 200)
+    let elements = [
+      TestFixtures.makeButton(outerHTML: "<button>OK</button>", cssSelector: ".btn", computedStyles: [:])
+    ]
+    let prompt = ElementInspectorPromptBuilder.buildCropPrompt(
+      cropRect: rect,
+      elements: elements,
+      instruction: "make it bigger"
+    )
+    #expect(prompt.contains("**Elements in region** (1):"))
+    #expect(prompt.contains("### Element 1"))
+    #expect(prompt.contains("<button>OK</button>"))
+    #expect(prompt.contains("User request: make it bigger"))
+  }
+
+  @Test func cropPromptWithScreenshotPathIncludesScreenshotLine() {
+    let rect = CGRect(x: 0, y: 0, width: 100, height: 50)
+    let prompt = ElementInspectorPromptBuilder.buildCropPrompt(
+      cropRect: rect,
+      elements: [],
+      instruction: "test",
+      screenshotPath: "/tmp/AgentHub/crop-screenshots/crop-abc12345-1234567890.png"
+    )
+    #expect(prompt.contains("**Screenshot**: /tmp/AgentHub/crop-screenshots/crop-abc12345-1234567890.png"))
+  }
+
+  @Test func cropPromptWithoutScreenshotPathOmitsScreenshotLine() {
+    let rect = CGRect(x: 0, y: 0, width: 100, height: 50)
+    let prompt = ElementInspectorPromptBuilder.buildCropPrompt(
+      cropRect: rect,
+      elements: [],
+      instruction: "test"
+    )
+    #expect(!prompt.contains("**Screenshot**"))
+  }
+
+  @Test func cropPromptScreenshotAppearsBeforeElements() {
+    let rect = CGRect(x: 0, y: 0, width: 200, height: 100)
+    let elements = [
+      TestFixtures.makeButton(outerHTML: "<p>Hello</p>", cssSelector: "p", computedStyles: [:])
+    ]
+    let prompt = ElementInspectorPromptBuilder.buildCropPrompt(
+      cropRect: rect,
+      elements: elements,
+      instruction: "change it",
+      screenshotPath: "/tmp/shot.png"
+    )
+    let screenshotIndex = prompt.range(of: "**Screenshot**")!.lowerBound
+    let elementsIndex = prompt.range(of: "**Elements in region**")!.lowerBound
+    #expect(screenshotIndex < elementsIndex)
   }
 }
