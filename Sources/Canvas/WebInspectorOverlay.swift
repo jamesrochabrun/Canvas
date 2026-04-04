@@ -29,21 +29,38 @@ struct WebInspectorOverlayModifier: ViewModifier {
   let inputPlacement: WebInspectInputPlacement
   let onSubmit: ((ElementInspectorData, String) -> Void)?
   let onContextSelection: ((ElementInspectorData) -> Void)?
+  let onCropSubmit: ((CGRect, [ElementInspectorData], String) -> Void)?
+
+  private var bannerHidden: Bool {
+    state.isInputShowing || state.isCropInputShowing
+  }
+
+  private var bannerText: String {
+    if state.isCropMode {
+      return "Crop Mode \u{2014} drag to select a region"
+    } else if state.isContextMode {
+      return "Context Mode \u{2014} click elements to capture"
+    } else {
+      return "Inspect Mode \u{2014} click any element"
+    }
+  }
+
+  private var bannerIcon: String {
+    state.isCropMode ? "crop" : "cursorarrow.rays"
+  }
 
   func body(content: Content) -> some View {
     ZStack {
       content
 
       // Top banner
-      if state.isActive, !state.isInputShowing {
+      if state.isActive, !bannerHidden {
         VStack {
           HStack(spacing: 6) {
-            Image(systemName: "cursorarrow.rays")
+            Image(systemName: bannerIcon)
               .font(.system(size: 12))
               .foregroundColor(.white)
-            Text(state.isContextMode
-              ? "Context Mode — click elements to capture"
-              : "Inspect Mode — click any element")
+            Text(bannerText)
               .font(.system(size: 11, weight: .semibold))
               .foregroundColor(.white)
             Spacer()
@@ -59,14 +76,24 @@ struct WebInspectorOverlayModifier: ViewModifier {
           }
           .padding(.horizontal, 12)
           .padding(.vertical, 6)
-          .background(Color.accentColor.opacity(0.85))
+          .background(state.isCropMode ? Color.orange.opacity(0.85) : Color.accentColor.opacity(0.85))
           Spacer()
         }
         .transition(.opacity.combined(with: .move(edge: .top)))
       }
 
+      // Crop input overlay
+      if state.isCropMode, state.isCropInputShowing {
+        WebInspectCropInputOverlay(
+          state: state,
+          onSubmit: onCropSubmit
+        )
+        .opacity(state.isReloading ? 0 : 1)
+        .transition(.opacity.combined(with: .move(edge: .bottom)))
+      }
+
       // Input/context overlay
-      if let element = state.selectedElement {
+      if !state.isCropMode, let element = state.selectedElement {
         Group {
           switch state.mode {
           case .input:
@@ -85,6 +112,9 @@ struct WebInspectorOverlayModifier: ViewModifier {
             )
             .padding(12)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+
+          case .crop:
+            EmptyView()
           }
         }
         .opacity(state.isReloading ? 0 : 1)
@@ -93,6 +123,7 @@ struct WebInspectorOverlayModifier: ViewModifier {
     }
     .animation(.easeOut(duration: 0.2), value: state.isActive)
     .animation(.easeOut(duration: 0.15), value: state.selectedElement?.id)
+    .animation(.easeOut(duration: 0.15), value: state.isCropInputShowing)
     .animation(.easeOut(duration: 0.2), value: state.isReloading)
     .onChange(of: state.selectedElement?.id) { _, newValue in
       guard newValue != nil,
@@ -114,17 +145,20 @@ public extension View {
   ///   - inputPlacement: Controls where the inspect input editor is placed in input mode.
   ///   - onSubmit: Called with the selected element and the user's instruction when they press Enter (input mode).
   ///   - onContextSelection: Called with the selected element immediately on click (context mode).
+  ///   - onCropSubmit: Called with the crop rect, captured elements, and the user's instruction when they press Enter (crop mode).
   func webInspectorOverlay(
     state: ElementInspectState,
     inputPlacement: WebInspectInputPlacement = .bottom,
     onSubmit: ((ElementInspectorData, String) -> Void)? = nil,
-    onContextSelection: ((ElementInspectorData) -> Void)? = nil
+    onContextSelection: ((ElementInspectorData) -> Void)? = nil,
+    onCropSubmit: ((CGRect, [ElementInspectorData], String) -> Void)? = nil
   ) -> some View {
     modifier(WebInspectorOverlayModifier(
       state: state,
       inputPlacement: inputPlacement,
       onSubmit: onSubmit,
-      onContextSelection: onContextSelection
+      onContextSelection: onContextSelection,
+      onCropSubmit: onCropSubmit
     ))
   }
 }

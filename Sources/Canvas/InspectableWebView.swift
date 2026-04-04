@@ -33,8 +33,12 @@ public struct InspectableWebView: NSViewRepresentable {
   public var onElementSelected: ((ElementInspectorData) -> Void)?
   /// Called when the selected element's viewport rect changes due to scrolling or resizing.
   public var onSelectedElementViewportRectChange: ((CGRect) -> Void)?
+  /// Called when the user finishes dragging a crop rectangle, with the elements found within it.
+  public var onCropRectSelected: ((CGRect, [ElementInspectorData]) -> Void)?
   /// Binding controlling whether the JS inspector overlay is active
   public var isInspectModeActive: Binding<Bool>?
+  /// The current inspect mode, used to choose between element and crop activation in JS.
+  public var inspectMode: InspectMode = .input
   /// ID of the currently selected element; nil means no selection (clears JS lock)
   public var selectedElementId: UUID? = nil
   /// CSS selector to scroll to and re-select after a reload completes.
@@ -54,7 +58,9 @@ public struct InspectableWebView: NSViewRepresentable {
     reloadToken: UUID? = nil,
     onElementSelected: ((ElementInspectorData) -> Void)? = nil,
     onSelectedElementViewportRectChange: ((CGRect) -> Void)? = nil,
+    onCropRectSelected: ((CGRect, [ElementInspectorData]) -> Void)? = nil,
     isInspectModeActive: Binding<Bool>? = nil,
+    inspectMode: InspectMode = .input,
     selectedElementId: UUID? = nil,
     selectorToRestore: String? = nil,
     onWebViewReady: ((WKWebView) -> Void)? = nil
@@ -69,7 +75,9 @@ public struct InspectableWebView: NSViewRepresentable {
     self.reloadToken = reloadToken
     self.onElementSelected = onElementSelected
     self.onSelectedElementViewportRectChange = onSelectedElementViewportRectChange
+    self.onCropRectSelected = onCropRectSelected
     self.isInspectModeActive = isInspectModeActive
+    self.inspectMode = inspectMode
     self.selectedElementId = selectedElementId
     self.selectorToRestore = selectorToRestore
     self.onWebViewReady = onWebViewReady
@@ -117,12 +125,31 @@ public struct InspectableWebView: NSViewRepresentable {
 
     // Sync inspect mode with JS without triggering redundant evaluations
     let newInspectState = isInspectModeActive?.wrappedValue ?? false
-    if newInspectState != context.coordinator.lastInspectModeState {
+    let newMode = inspectMode
+    let oldMode = context.coordinator.lastInspectMode
+    let modeChanged = newMode != oldMode
+
+    if newInspectState != context.coordinator.lastInspectModeState || (modeChanged && newInspectState) {
+      // Deactivate the old mode first if transitioning
+      if context.coordinator.lastInspectModeState {
+        switch oldMode {
+        case .crop:
+          ElementInspectorBridge.deactivateCrop(in: webView)
+        case .input, .context:
+          ElementInspectorBridge.deactivate(in: webView)
+        }
+      }
+
       context.coordinator.lastInspectModeState = newInspectState
+      context.coordinator.lastInspectMode = newMode
+
       if newInspectState {
-        ElementInspectorBridge.activate(in: webView)
-      } else {
-        ElementInspectorBridge.deactivate(in: webView)
+        switch newMode {
+        case .crop:
+          ElementInspectorBridge.activateCrop(in: webView)
+        case .input, .context:
+          ElementInspectorBridge.activate(in: webView)
+        }
       }
     }
 
@@ -156,6 +183,7 @@ public struct InspectableWebView: NSViewRepresentable {
     var lastLoadedURL: URL?
     var lastReloadToken: UUID?
     var lastInspectModeState: Bool = false
+    var lastInspectMode: InspectMode = .input
     var lastSelectedElementId: UUID?
     /// Held weakly to avoid retaining the view after dealloc
     weak var webView: WKWebView?
@@ -164,6 +192,7 @@ public struct InspectableWebView: NSViewRepresentable {
       self.parent = parent
       self.lastLoadedURL = parent.url
       self.lastReloadToken = parent.reloadToken
+      self.lastInspectMode = parent.inspectMode
     }
 
     public func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
@@ -180,7 +209,12 @@ public struct InspectableWebView: NSViewRepresentable {
       }
       // Re-activate inspector after HMR/page reload if still active
       if parent.isInspectModeActive?.wrappedValue == true {
-        ElementInspectorBridge.activate(in: webView)
+        switch parent.inspectMode {
+        case .crop:
+          ElementInspectorBridge.activateCrop(in: webView)
+        case .input, .context:
+          ElementInspectorBridge.activate(in: webView)
+        }
       }
 
       // Restore selection by scrolling to the previously selected element
@@ -217,12 +251,25 @@ public struct InspectableWebView: NSViewRepresentable {
         let body = message.body as? [String: Any]
       else { return }
 
-      if let messageType = body["type"] as? String, messageType == "selectionRect" {
-        let rect = ElementInspectorBridge.parseSelectionRect(body)
-        Task { @MainActor in
-          parent.onSelectedElementViewportRectChange?(rect)
+      if let messageType = body["type"] as? String {
+        switch messageType {
+        case "selectionRect":
+          let rect = ElementInspectorBridge.parseSelectionRect(body)
+          Task { @MainActor in
+            parent.onSelectedElementViewportRectChange?(rect)
+          }
+          return
+
+        case "cropRect":
+          let (rect, elements) = ElementInspectorBridge.parseCropData(body)
+          Task { @MainActor in
+            parent.onCropRectSelected?(rect, elements)
+          }
+          return
+
+        default:
+          break
         }
-        return
       }
 
       Task { @MainActor in
