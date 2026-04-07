@@ -213,7 +213,7 @@ struct ElementInspectorPromptBuilderTests {
     )
     #expect(!prompt.contains("**Elements in region**"))
     #expect(prompt.contains("User request: describe this"))
-    #expect(prompt.contains("Please modify the source code to make this change."))
+    #expect(!prompt.contains("Please modify the source code to make this change."))
   }
 
   @Test func cropPromptWithElementsIncludesElementsSection() {
@@ -240,7 +240,8 @@ struct ElementInspectorPromptBuilderTests {
       instruction: "test",
       screenshotPath: "/tmp/AgentHub/crop-screenshots/crop-abc12345-1234567890.png"
     )
-    #expect(prompt.contains("**Screenshot**: /tmp/AgentHub/crop-screenshots/crop-abc12345-1234567890.png"))
+    #expect(prompt.contains("**Image**:"))
+    #expect(prompt.contains("/tmp/AgentHub/crop-screenshots/crop-abc12345-1234567890.png"))
   }
 
   @Test func cropPromptWithoutScreenshotPathOmitsScreenshotLine() {
@@ -250,7 +251,7 @@ struct ElementInspectorPromptBuilderTests {
       elements: [],
       instruction: "test"
     )
-    #expect(!prompt.contains("**Screenshot**"))
+    #expect(!prompt.contains("**Image**"))
   }
 
   @Test func cropPromptScreenshotAppearsBeforeElements() {
@@ -264,7 +265,7 @@ struct ElementInspectorPromptBuilderTests {
       instruction: "change it",
       screenshotPath: "/tmp/shot.png"
     )
-    let screenshotIndex = prompt.range(of: "**Screenshot**")!.lowerBound
+    let screenshotIndex = prompt.range(of: "**Image**")!.lowerBound
     let elementsIndex = prompt.range(of: "**Elements in region**")!.lowerBound
     #expect(screenshotIndex < elementsIndex)
   }

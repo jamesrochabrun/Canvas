@@ -142,7 +142,8 @@ public enum ElementInspectorPromptBuilder {
     ]
 
     if let path = screenshotPath {
-      lines.append("**Screenshot**: \(path)")
+      lines.append("**Image**:")
+      lines.append(path)
       lines.append("")
     }
 
@@ -160,8 +161,6 @@ public enum ElementInspectorPromptBuilder {
     }
 
     lines.append("User request: \(instruction)")
-    lines.append("")
-    lines.append("Please modify the source code to make this change.")
 
     return lines.joined(separator: "\n")
   }
