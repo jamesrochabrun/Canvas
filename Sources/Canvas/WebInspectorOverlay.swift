@@ -30,6 +30,7 @@ struct WebInspectorOverlayModifier: ViewModifier {
   let onSubmit: ((ElementInspectorData, String) -> Void)?
   let onContextSelection: ((ElementInspectorData) -> Void)?
   let onCropSubmit: ((CGRect, [ElementInspectorData], String) -> Void)?
+  let deactivateOnSubmit: Bool
 
   private var bannerHidden: Bool {
     state.isInputShowing || state.isCropInputShowing
@@ -86,7 +87,8 @@ struct WebInspectorOverlayModifier: ViewModifier {
       if state.isCropMode, state.isCropInputShowing {
         WebInspectCropInputOverlay(
           state: state,
-          onSubmit: onCropSubmit
+          onSubmit: onCropSubmit,
+          deactivateOnSubmit: deactivateOnSubmit
         )
         .opacity(state.isReloading ? 0 : 1)
         .transition(.opacity.combined(with: .move(edge: .bottom)))
@@ -100,7 +102,8 @@ struct WebInspectorOverlayModifier: ViewModifier {
             WebInspectInputOverlay(
               state: state,
               placement: inputPlacement,
-              onSubmit: onSubmit
+              onSubmit: onSubmit,
+              deactivateOnSubmit: deactivateOnSubmit
             )
 
           case .context:
@@ -146,19 +149,22 @@ public extension View {
   ///   - onSubmit: Called with the selected element and the user's instruction when they press Enter (input mode).
   ///   - onContextSelection: Called with the selected element immediately on click (context mode).
   ///   - onCropSubmit: Called with the crop rect, captured elements, and the user's instruction when they press Enter (crop mode).
+  ///   - deactivateOnSubmit: Whether input and crop submissions deactivate inspect mode after submit.
   func webInspectorOverlay(
     state: ElementInspectState,
     inputPlacement: WebInspectInputPlacement = .bottom,
     onSubmit: ((ElementInspectorData, String) -> Void)? = nil,
     onContextSelection: ((ElementInspectorData) -> Void)? = nil,
-    onCropSubmit: ((CGRect, [ElementInspectorData], String) -> Void)? = nil
+    onCropSubmit: ((CGRect, [ElementInspectorData], String) -> Void)? = nil,
+    deactivateOnSubmit: Bool = true
   ) -> some View {
     modifier(WebInspectorOverlayModifier(
       state: state,
       inputPlacement: inputPlacement,
       onSubmit: onSubmit,
       onContextSelection: onContextSelection,
-      onCropSubmit: onCropSubmit
+      onCropSubmit: onCropSubmit,
+      deactivateOnSubmit: deactivateOnSubmit
     ))
   }
 }
