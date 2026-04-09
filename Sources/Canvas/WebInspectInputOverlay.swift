@@ -11,6 +11,7 @@ struct WebInspectInputOverlay: View {
   @Bindable var state: ElementInspectState
   let placement: WebInspectInputPlacement
   let onSubmit: ((ElementInspectorData, String) -> Void)?
+  let deactivateOnSubmit: Bool
 
   @State private var measuredHeight: CGFloat = Self.defaultHeight
 
@@ -65,7 +66,11 @@ struct WebInspectInputOverlay: View {
       element: element,
       onSubmit: { instruction in
         onSubmit?(element, instruction)
-        state.deactivate()
+        if deactivateOnSubmit {
+          state.deactivate()
+        } else {
+          state.dismissInput()
+        }
       },
       onDismiss: {
         state.dismissInput()
