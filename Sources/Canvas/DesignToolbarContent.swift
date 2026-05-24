@@ -19,36 +19,79 @@ public struct DesignToolbarContent: View {
 
   @Bindable var values: DesignToolbarValues
   let element: ElementInspectorData
+  let isTextContentEditable: Bool
   let onEdit: (DesignEdit) -> Void
 
   public init(
     values: DesignToolbarValues,
     element: ElementInspectorData,
+    isTextContentEditable: Bool = false,
     onEdit: @escaping (DesignEdit) -> Void
   ) {
     self.values = values
     self.element = element
+    self.isTextContentEditable = isTextContentEditable
     self.onEdit = onEdit
   }
 
   public var body: some View {
-    HStack(spacing: 2) {
-      if values.category.supportsTextControls {
-        textControls
+    VStack(alignment: .leading, spacing: 6) {
+      if showsTextContentEditor {
+        textContentEditor
       }
 
-      if values.category.supportsBackgroundColor {
-        backgroundColorControl
-      }
+      HStack(spacing: 2) {
+        if values.category.supportsTextControls {
+          textControls
+        }
 
-      if values.category.supportsLayoutControls {
-        layoutControls
-      }
+        if values.category.supportsBackgroundColor {
+          backgroundColorControl
+        }
 
-      if values.category.supportsImageControls {
-        imageControls
+        if values.category.supportsLayoutControls {
+          layoutControls
+        }
+
+        if values.category.supportsImageControls {
+          imageControls
+        }
       }
     }
+  }
+
+  // MARK: - Text Content
+
+  private var showsTextContentEditor: Bool {
+    isTextContentEditable
+  }
+
+  private var textContentEditor: some View {
+    HStack(spacing: 6) {
+      Image(systemName: "text.quote")
+        .font(.system(size: 11, weight: .medium))
+        .foregroundStyle(.secondary)
+
+      TextField(
+        "Text",
+        text: Binding(
+          get: { values.textContent },
+          set: { newValue in
+            guard newValue != values.textContent else { return }
+            values.textContent = newValue
+            onEdit(DesignEdit(element: element, action: .updateTextContent(newValue)))
+          }
+        ),
+        axis: .vertical
+      )
+      .textFieldStyle(.plain)
+      .font(.system(size: 12))
+      .lineLimit(1...3)
+      .frame(minWidth: 220, idealWidth: 360, maxWidth: 520)
+    }
+    .padding(.horizontal, 8)
+    .padding(.vertical, 6)
+    .background(toolControlBackground)
   }
 
   // MARK: - Text Controls

@@ -97,6 +97,13 @@ public final class ElementInspectState {
     selectedElementViewportRect = rect
   }
 
+  /// Replaces the selected element with fresh DOM data without dismissing the overlay.
+  public func refreshSelectedElement(_ element: ElementInspectorData) {
+    guard selectedElement != nil else { return }
+    selectedElement = element
+    selectedElementViewportRect = element.boundingRect
+  }
+
   /// Dismisses the input overlay without deactivating inspect mode.
   public func dismissInput() {
     clearSelection()

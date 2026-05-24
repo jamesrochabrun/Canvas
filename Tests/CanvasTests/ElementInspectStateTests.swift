@@ -112,6 +112,33 @@ struct ElementInspectStateTests {
     #expect(state.selectedElementViewportRect == updatedRect)
   }
 
+  @Test func refreshSelectedElementKeepsSelectionOpenWithFreshData() {
+    let state = ElementInspectState()
+    let original = TestFixtures.makeButton(textContent: "Submit")
+    let refreshed = TestFixtures.makeButton(
+      textContent: "Buy now",
+      computedStyles: ["fontSize": "20px"],
+      boundingRect: CGRect(x: 20, y: 30, width: 180, height: 60)
+    )
+
+    state.selectElement(original)
+    state.refreshSelectedElement(refreshed)
+
+    #expect(state.selectedElement == refreshed)
+    #expect(state.selectedElementViewportRect == refreshed.boundingRect)
+    #expect(state.isInputShowing)
+  }
+
+  @Test func refreshSelectedElementDoesNothingWithoutSelection() {
+    let state = ElementInspectState()
+    let refreshed = TestFixtures.makeButton(textContent: "Buy now")
+
+    state.refreshSelectedElement(refreshed)
+
+    #expect(state.selectedElement == nil)
+    #expect(state.selectedElementViewportRect == nil)
+  }
+
   // MARK: - Lifecycle & Edge Cases
 
   @Test func fullLifecycleSequence() {

@@ -31,6 +31,8 @@ public struct InspectableWebView: NSViewRepresentable {
   public var reloadToken: UUID? = nil
   /// Called when the user clicks an element in inspect mode
   public var onElementSelected: ((ElementInspectorData) -> Void)?
+  /// Called when the selected element is recaptured after live DOM changes.
+  public var onSelectedElementDataChange: ((ElementInspectorData) -> Void)?
   /// Called when the selected element's viewport rect changes due to scrolling or resizing.
   public var onSelectedElementViewportRectChange: ((CGRect) -> Void)?
   /// Called when the user finishes dragging a crop rectangle, with the elements found within it.
@@ -59,6 +61,7 @@ public struct InspectableWebView: NSViewRepresentable {
     onError: ((String) -> Void)? = nil,
     reloadToken: UUID? = nil,
     onElementSelected: ((ElementInspectorData) -> Void)? = nil,
+    onSelectedElementDataChange: ((ElementInspectorData) -> Void)? = nil,
     onSelectedElementViewportRectChange: ((CGRect) -> Void)? = nil,
     onCropRectSelected: ((CGRect, [ElementInspectorData]) -> Void)? = nil,
     onCropRectViewportChange: ((CGRect) -> Void)? = nil,
@@ -77,6 +80,7 @@ public struct InspectableWebView: NSViewRepresentable {
     self.onError = onError
     self.reloadToken = reloadToken
     self.onElementSelected = onElementSelected
+    self.onSelectedElementDataChange = onSelectedElementDataChange
     self.onSelectedElementViewportRectChange = onSelectedElementViewportRectChange
     self.onCropRectSelected = onCropRectSelected
     self.onCropRectViewportChange = onCropRectViewportChange
@@ -261,6 +265,13 @@ public struct InspectableWebView: NSViewRepresentable {
           let rect = ElementInspectorBridge.parseSelectionRect(body)
           Task { @MainActor in
             parent.onSelectedElementViewportRectChange?(rect)
+          }
+          return
+
+        case "selectedElementDataChange":
+          let element = ElementInspectorBridge.parseElementData(body)
+          Task { @MainActor in
+            parent.onSelectedElementDataChange?(element)
           }
           return
 
