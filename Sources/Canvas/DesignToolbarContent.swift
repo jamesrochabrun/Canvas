@@ -69,7 +69,7 @@ public struct DesignToolbarContent: View {
   private var textContentEditor: some View {
     HStack(spacing: 6) {
       Image(systemName: "text.quote")
-        .font(.system(size: 11, weight: .medium))
+        .font(.system(size: Self.iconFontSize, weight: .medium))
         .foregroundStyle(.secondary)
 
       TextField(
@@ -85,13 +85,14 @@ public struct DesignToolbarContent: View {
         axis: .vertical
       )
       .textFieldStyle(.plain)
-      .font(.system(size: 12))
+      .font(.system(size: Self.textFieldFontSize))
       .lineLimit(1...3)
       .frame(minWidth: 220, idealWidth: 360, maxWidth: 520)
     }
-    .padding(.horizontal, 8)
-    .padding(.vertical, 6)
+    .padding(.horizontal, Self.controlHorizontalPadding)
+    .padding(.vertical, Self.controlVerticalPadding)
     .background(toolControlBackground)
+    .contentShape(RoundedRectangle(cornerRadius: Self.controlCornerRadius))
   }
 
   // MARK: - Text Controls
@@ -140,18 +141,21 @@ public struct DesignToolbarContent: View {
     } label: {
       HStack(spacing: 4) {
         Text(displayFontFamily)
-          .font(.system(size: 11))
+          .font(.system(size: Self.smallTextFontSize))
           .lineLimit(1)
         Image(systemName: "chevron.down")
-          .font(.system(size: 7, weight: .bold))
+          .font(.system(size: Self.chevronFontSize, weight: .bold))
       }
       .foregroundColor(.primary)
-      .padding(.horizontal, 8)
-      .padding(.vertical, 6)
+      .padding(.horizontal, Self.controlHorizontalPadding)
+      .padding(.vertical, Self.controlVerticalPadding)
+      .frame(minHeight: Self.controlHeight)
       .background(toolControlBackground)
+      .contentShape(RoundedRectangle(cornerRadius: Self.controlCornerRadius))
     }
     .menuStyle(.borderlessButton)
     .fixedSize()
+    .contentShape(RoundedRectangle(cornerRadius: Self.controlCornerRadius))
   }
 
   private var displayFontFamily: String {
@@ -171,7 +175,8 @@ public struct DesignToolbarContent: View {
       }
     ))
     .labelsHidden()
-    .frame(width: 28, height: 24)
+    .frame(width: Self.colorControlWidth, height: Self.controlHeight)
+    .contentShape(Rectangle())
   }
 
   // MARK: - Font Size
@@ -184,27 +189,33 @@ public struct DesignToolbarContent: View {
         emitEdit(.fontSize, value: "\(values.fontSize)px")
       } label: {
         Image(systemName: "minus")
-          .font(.system(size: 10, weight: .medium))
-          .frame(width: 24, height: 24)
+          .font(.system(size: Self.iconFontSize, weight: .medium))
+          .frame(width: Self.iconButtonSize, height: Self.controlHeight)
+          .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
+      .contentShape(Rectangle())
 
       Text("\(values.fontSize)")
-        .font(.system(size: 11, design: .monospaced))
-        .frame(minWidth: 28)
+        .font(.system(size: Self.smallTextFontSize, design: .monospaced))
+        .frame(minWidth: Self.valueLabelWidth, minHeight: Self.controlHeight)
 
       Button {
         values.fontSize += 1
         emitEdit(.fontSize, value: "\(values.fontSize)px")
       } label: {
         Image(systemName: "plus")
-          .font(.system(size: 10, weight: .medium))
-          .frame(width: 24, height: 24)
+          .font(.system(size: Self.iconFontSize, weight: .medium))
+          .frame(width: Self.iconButtonSize, height: Self.controlHeight)
+          .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
+      .contentShape(Rectangle())
     }
     .foregroundColor(.primary)
+    .frame(minHeight: Self.controlHeight)
     .background(toolControlBackground)
+    .contentShape(RoundedRectangle(cornerRadius: Self.controlCornerRadius))
   }
 
   // MARK: - Bold / Italic
@@ -216,10 +227,12 @@ public struct DesignToolbarContent: View {
         emitEdit(.fontWeight, value: values.isBold ? "700" : "400")
       } label: {
         Text("B")
-          .font(.system(size: 13, weight: .bold))
-          .frame(width: 26, height: 24)
+          .font(.system(size: Self.buttonTextFontSize, weight: .bold))
+          .frame(width: Self.textButtonWidth, height: Self.controlHeight)
+          .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
+      .contentShape(Rectangle())
       .foregroundColor(values.isBold ? .accentColor : .primary)
 
       Button {
@@ -227,13 +240,17 @@ public struct DesignToolbarContent: View {
         emitEdit(.fontStyle, value: values.isItalic ? "italic" : "normal")
       } label: {
         Text("I")
-          .font(.system(size: 13, weight: .regular).italic())
-          .frame(width: 26, height: 24)
+          .font(.system(size: Self.buttonTextFontSize, weight: .regular).italic())
+          .frame(width: Self.textButtonWidth, height: Self.controlHeight)
+          .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
+      .contentShape(Rectangle())
       .foregroundColor(values.isItalic ? .accentColor : .primary)
     }
+    .frame(minHeight: Self.controlHeight)
     .background(toolControlBackground)
+    .contentShape(RoundedRectangle(cornerRadius: Self.controlCornerRadius))
   }
 
   // MARK: - Alignment
@@ -251,17 +268,20 @@ public struct DesignToolbarContent: View {
     } label: {
       HStack(spacing: 4) {
         Image(systemName: values.textAlign.icon)
-          .font(.system(size: 12))
+          .font(.system(size: Self.iconFontSize))
         Image(systemName: "chevron.down")
-          .font(.system(size: 7, weight: .bold))
+          .font(.system(size: Self.chevronFontSize, weight: .bold))
       }
       .foregroundColor(.primary)
-      .padding(.horizontal, 6)
-      .padding(.vertical, 6)
+      .padding(.horizontal, Self.compactControlHorizontalPadding)
+      .padding(.vertical, Self.controlVerticalPadding)
+      .frame(minHeight: Self.controlHeight)
       .background(toolControlBackground)
+      .contentShape(RoundedRectangle(cornerRadius: Self.controlCornerRadius))
     }
     .menuStyle(.borderlessButton)
     .fixedSize()
+    .contentShape(RoundedRectangle(cornerRadius: Self.controlCornerRadius))
   }
 
   // MARK: - Spacing
@@ -279,17 +299,20 @@ public struct DesignToolbarContent: View {
     } label: {
       HStack(spacing: 4) {
         Image(systemName: "arrow.left.and.right")
-          .font(.system(size: 11))
+          .font(.system(size: Self.iconFontSize))
         Image(systemName: "chevron.down")
-          .font(.system(size: 7, weight: .bold))
+          .font(.system(size: Self.chevronFontSize, weight: .bold))
       }
       .foregroundColor(.primary)
-      .padding(.horizontal, 6)
-      .padding(.vertical, 6)
+      .padding(.horizontal, Self.compactControlHorizontalPadding)
+      .padding(.vertical, Self.controlVerticalPadding)
+      .frame(minHeight: Self.controlHeight)
       .background(toolControlBackground)
+      .contentShape(RoundedRectangle(cornerRadius: Self.controlCornerRadius))
     }
     .menuStyle(.borderlessButton)
     .fixedSize()
+    .contentShape(RoundedRectangle(cornerRadius: Self.controlCornerRadius))
   }
 
   // MARK: - Background Color
@@ -306,7 +329,8 @@ public struct DesignToolbarContent: View {
         }
       ))
       .labelsHidden()
-      .frame(width: 28, height: 24)
+      .frame(width: Self.colorControlWidth, height: Self.controlHeight)
+      .contentShape(Rectangle())
     }
   }
 
@@ -328,17 +352,20 @@ public struct DesignToolbarContent: View {
     } label: {
       HStack(spacing: 4) {
         Image(systemName: "square.bottomhalf.filled")
-          .font(.system(size: 11))
+          .font(.system(size: Self.iconFontSize))
         Image(systemName: "chevron.down")
-          .font(.system(size: 7, weight: .bold))
+          .font(.system(size: Self.chevronFontSize, weight: .bold))
       }
       .foregroundColor(.primary)
-      .padding(.horizontal, 6)
-      .padding(.vertical, 6)
+      .padding(.horizontal, Self.compactControlHorizontalPadding)
+      .padding(.vertical, Self.controlVerticalPadding)
+      .frame(minHeight: Self.controlHeight)
       .background(toolControlBackground)
+      .contentShape(RoundedRectangle(cornerRadius: Self.controlCornerRadius))
     }
     .menuStyle(.borderlessButton)
     .fixedSize()
+    .contentShape(RoundedRectangle(cornerRadius: Self.controlCornerRadius))
   }
 
   // MARK: - Image Controls
@@ -348,12 +375,13 @@ public struct DesignToolbarContent: View {
     // Image thumbnail placeholder
     RoundedRectangle(cornerRadius: 4)
       .fill(Color.secondary.opacity(0.3))
-      .frame(width: 32, height: 24)
+      .frame(width: Self.imagePreviewWidth, height: Self.controlHeight)
       .overlay(
         Image(systemName: "photo")
-          .font(.system(size: 10))
+          .font(.system(size: Self.iconFontSize))
           .foregroundColor(.secondary)
       )
+      .contentShape(RoundedRectangle(cornerRadius: Self.controlCornerRadius))
 
     divider
 
@@ -368,17 +396,20 @@ public struct DesignToolbarContent: View {
     } label: {
       HStack(spacing: 4) {
         Image(systemName: "square.bottomhalf.filled")
-          .font(.system(size: 11))
+          .font(.system(size: Self.iconFontSize))
         Image(systemName: "chevron.down")
-          .font(.system(size: 7, weight: .bold))
+          .font(.system(size: Self.chevronFontSize, weight: .bold))
       }
       .foregroundColor(.primary)
-      .padding(.horizontal, 6)
-      .padding(.vertical, 6)
+      .padding(.horizontal, Self.compactControlHorizontalPadding)
+      .padding(.vertical, Self.controlVerticalPadding)
+      .frame(minHeight: Self.controlHeight)
       .background(toolControlBackground)
+      .contentShape(RoundedRectangle(cornerRadius: Self.controlCornerRadius))
     }
     .menuStyle(.borderlessButton)
     .fixedSize()
+    .contentShape(RoundedRectangle(cornerRadius: Self.controlCornerRadius))
 
     divider
 
@@ -395,17 +426,20 @@ public struct DesignToolbarContent: View {
     } label: {
       HStack(spacing: 4) {
         Image(systemName: "arrow.left.and.right")
-          .font(.system(size: 11))
+          .font(.system(size: Self.iconFontSize))
         Image(systemName: "chevron.down")
-          .font(.system(size: 7, weight: .bold))
+          .font(.system(size: Self.chevronFontSize, weight: .bold))
       }
       .foregroundColor(.primary)
-      .padding(.horizontal, 6)
-      .padding(.vertical, 6)
+      .padding(.horizontal, Self.compactControlHorizontalPadding)
+      .padding(.vertical, Self.controlVerticalPadding)
+      .frame(minHeight: Self.controlHeight)
       .background(toolControlBackground)
+      .contentShape(RoundedRectangle(cornerRadius: Self.controlCornerRadius))
     }
     .menuStyle(.borderlessButton)
     .fixedSize()
+    .contentShape(RoundedRectangle(cornerRadius: Self.controlCornerRadius))
   }
 
   // MARK: - Helpers
@@ -450,4 +484,20 @@ public struct DesignToolbarContent: View {
   private static let radiusPresets = [
     "0px", "4px", "8px", "12px", "16px", "24px", "9999px",
   ]
+
+  private static let controlHeight: CGFloat = 26
+  private static let iconButtonSize: CGFloat = 26
+  private static let textButtonWidth: CGFloat = 28
+  private static let valueLabelWidth: CGFloat = 30
+  private static let colorControlWidth: CGFloat = 30
+  private static let imagePreviewWidth: CGFloat = 34
+  private static let controlHorizontalPadding: CGFloat = 9
+  private static let compactControlHorizontalPadding: CGFloat = 7
+  private static let controlVerticalPadding: CGFloat = 7
+  private static let controlCornerRadius: CGFloat = 6
+  private static let iconFontSize: CGFloat = 12
+  private static let chevronFontSize: CGFloat = 8
+  private static let smallTextFontSize: CGFloat = 12
+  private static let textFieldFontSize: CGFloat = 13
+  private static let buttonTextFontSize: CGFloat = 14
 }

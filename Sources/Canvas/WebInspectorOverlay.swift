@@ -6,6 +6,7 @@
 //  to any view. Works with InspectableWebView or any custom WKWebView setup.
 //
 
+import AppKit
 import SwiftUI
 
 // MARK: - WebInspectorOverlay
@@ -30,6 +31,7 @@ struct WebInspectorOverlayModifier: ViewModifier {
   let onSubmit: ((ElementInspectorData, String) -> Void)?
   let onContextSelection: ((ElementInspectorData) -> Void)?
   let onCropSubmit: ((CGRect, [ElementInspectorData], String) -> Void)?
+  let onOverlayHoverChange: ((Bool) -> Void)?
   let deactivateOnSubmit: Bool
 
   private var bannerHidden: Bool {
@@ -71,6 +73,8 @@ struct WebInspectorOverlayModifier: ViewModifier {
               Image(systemName: "xmark")
                 .font(.system(size: 10))
                 .foregroundColor(.white.opacity(0.8))
+                .frame(width: 24, height: 24)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .help("Exit inspect mode (Esc)")
@@ -78,6 +82,8 @@ struct WebInspectorOverlayModifier: ViewModifier {
           .padding(.horizontal, 12)
           .padding(.vertical, 6)
           .background(state.isCropMode ? Color.orange.opacity(0.85) : Color.accentColor.opacity(0.85))
+          .contentShape(Rectangle())
+          .webInspectorOverlayCursor(label: "webInspectorBanner", onHoverChange: onOverlayHoverChange)
           Spacer()
         }
         .transition(.opacity.combined(with: .move(edge: .top)))
@@ -149,6 +155,7 @@ public extension View {
   ///   - onSubmit: Called with the selected element and the user's instruction when they press Enter (input mode).
   ///   - onContextSelection: Called with the selected element immediately on click (context mode).
   ///   - onCropSubmit: Called with the crop rect, captured elements, and the user's instruction when they press Enter (crop mode).
+  ///   - onOverlayHoverChange: Called when the pointer enters or exits the inspector overlay chrome.
   ///   - deactivateOnSubmit: Whether input and crop submissions deactivate inspect mode after submit.
   func webInspectorOverlay(
     state: ElementInspectState,
@@ -156,6 +163,7 @@ public extension View {
     onSubmit: ((ElementInspectorData, String) -> Void)? = nil,
     onContextSelection: ((ElementInspectorData) -> Void)? = nil,
     onCropSubmit: ((CGRect, [ElementInspectorData], String) -> Void)? = nil,
+    onOverlayHoverChange: ((Bool) -> Void)? = nil,
     deactivateOnSubmit: Bool = true
   ) -> some View {
     modifier(WebInspectorOverlayModifier(
@@ -164,7 +172,47 @@ public extension View {
       onSubmit: onSubmit,
       onContextSelection: onContextSelection,
       onCropSubmit: onCropSubmit,
+      onOverlayHoverChange: onOverlayHoverChange,
       deactivateOnSubmit: deactivateOnSubmit
     ))
+  }
+}
+
+private struct WebInspectorOverlayCursorModifier: ViewModifier {
+  let label: String
+  let onHoverChange: ((Bool) -> Void)?
+  @State private var isHovering = false
+
+  func body(content: Content) -> some View {
+    content
+      .onHover { hovering in
+        print("[HOVER] \(label) hovering=\(hovering)")
+        updateCursor(isHovering: hovering)
+        onHoverChange?(hovering)
+      }
+      .onDisappear {
+        print("[HOVER] \(label) disappear")
+        updateCursor(isHovering: false)
+        onHoverChange?(false)
+      }
+  }
+
+  private func updateCursor(isHovering: Bool) {
+    guard isHovering != self.isHovering else { return }
+    self.isHovering = isHovering
+    if isHovering {
+      NSCursor.arrow.push()
+    } else {
+      NSCursor.pop()
+    }
+  }
+}
+
+private extension View {
+  func webInspectorOverlayCursor(
+    label: String,
+    onHoverChange: ((Bool) -> Void)?
+  ) -> some View {
+    modifier(WebInspectorOverlayCursorModifier(label: label, onHoverChange: onHoverChange))
   }
 }
