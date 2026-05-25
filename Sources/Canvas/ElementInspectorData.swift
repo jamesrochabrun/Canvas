@@ -57,6 +57,8 @@ public struct ElementInspectorData: Identifiable, Equatable, Sendable {
   public let cssSelector: String
   /// Computed styles captured from `getComputedStyle()`.
   public let computedStyles: [String: String]
+  /// Font families discovered from the active page's loaded fonts and stylesheets.
+  public let availableFontFamilies: [String]
   /// Element bounding rect in viewport coordinates (`getBoundingClientRect()`).
   public let boundingRect: CGRect
   /// Parent element tag name (empty when parent is `<body>` or absent).
@@ -88,6 +90,7 @@ public struct ElementInspectorData: Identifiable, Equatable, Sendable {
     outerHTML: String,
     cssSelector: String,
     computedStyles: [String: String],
+    availableFontFamilies: [String] = [],
     boundingRect: CGRect,
     parentTagName: String = "",
     parentStyles: [String: String] = [:],
@@ -102,6 +105,7 @@ public struct ElementInspectorData: Identifiable, Equatable, Sendable {
     self.outerHTML = outerHTML
     self.cssSelector = cssSelector
     self.computedStyles = computedStyles
+    self.availableFontFamilies = availableFontFamilies
     self.boundingRect = boundingRect
     self.parentTagName = parentTagName
     self.parentStyles = parentStyles

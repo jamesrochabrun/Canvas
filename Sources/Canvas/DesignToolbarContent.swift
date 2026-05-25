@@ -132,7 +132,7 @@ public struct DesignToolbarContent: View {
 
   private var fontFamilyPicker: some View {
     Menu {
-      ForEach(Self.commonFontFamilies, id: \.self) { family in
+      ForEach(values.fontFamilyOptions, id: \.self) { family in
         Button(family) {
           values.fontFamily = family
           emitEdit(.fontFamily, value: family)
@@ -464,18 +464,6 @@ public struct DesignToolbarContent: View {
   }
 
   // MARK: - Presets
-
-  private static let commonFontFamilies = [
-    "system-ui",
-    "sans-serif",
-    "serif",
-    "monospace",
-    "Inter",
-    "Helvetica",
-    "Arial",
-    "Georgia",
-    "Times New Roman",
-  ]
 
   private static let spacingPresets = [
     "normal", "-0.5px", "0px", "0.5px", "1px", "1.5px", "2px", "3px",

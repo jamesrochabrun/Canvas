@@ -136,6 +136,7 @@ struct DesignToolbarValuesTests {
           "letterSpacing": "0.5px",
           "lineHeight": "56px",
         ],
+        availableFontFamilies: ["Inter", "Custom Sans", "sans-serif", "Georgia"],
         boundingRect: CGRect(x: 0, y: 0, width: 400, height: 56)
       )
 
@@ -151,6 +152,7 @@ struct DesignToolbarValuesTests {
       #expect(values.letterSpacing == "0.5px")
       #expect(values.lineHeight == "56px")
       #expect(values.textContent == "Hello World")
+      #expect(Array(values.fontFamilyOptions.prefix(4)) == ["Inter", "Custom Sans", "Georgia", "system-ui"])
     }
 
     @Test("Parses button element")
@@ -206,6 +208,7 @@ struct DesignToolbarValuesTests {
 
       #expect(values.category == .container)
       #expect(values.fontFamily == "sans-serif")
+      #expect(Array(values.fontFamilyOptions.prefix(4)) == ["sans-serif", "system-ui", "serif", "monospace"])
       #expect(values.fontSize == 16)
       #expect(!values.isBold)
       #expect(!values.isItalic)

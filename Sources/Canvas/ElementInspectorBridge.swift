@@ -65,6 +65,7 @@ public enum ElementInspectorBridge {
   /// Parses the dictionary sent from JS `postMessage` into an `ElementInspectorData`.
   public static func parseElementData(_ body: [String: Any]) -> ElementInspectorData {
     let styles = body["computedStyles"] as? [String: String] ?? [:]
+    let availableFontFamilies = parseStringArray(from: body["availableFontFamilies"])
     let rect = parseRect(from: body)
     let parentContext = body["parentContext"] as? [String: Any]
     let parentTagName = parentContext?["tagName"] as? String ?? ""
@@ -80,6 +81,7 @@ public enum ElementInspectorBridge {
       outerHTML: body["outerHTML"] as? String ?? "",
       cssSelector: body["cssSelector"] as? String ?? "",
       computedStyles: styles,
+      availableFontFamilies: availableFontFamilies,
       boundingRect: rect,
       parentTagName: parentTagName,
       parentStyles: parentStyles,
@@ -214,6 +216,18 @@ public enum ElementInspectorBridge {
         var selectionRectFrame = null;
         var selectedElementDataFrame = null;
         var selectedElementObserver = null;
+        var fontFamiliesCache = null;
+        var fontFamiliesCacheTime = 0;
+
+        if (
+          document.fonts &&
+          document.fonts.ready &&
+          typeof document.fonts.ready.then === 'function'
+        ) {
+          document.fonts.ready.then(function() {
+            fontFamiliesCache = null;
+          }).catch(function() {});
+        }
 
         function buildCSSSelector(el) {
           var parts = [];
@@ -245,6 +259,142 @@ public enum ElementInspectorBridge {
           return parts.join(' > ') || el.tagName.toLowerCase();
         }
 
+        function addFontFamilyValue(value, result, seen) {
+          if (typeof value !== 'string') return;
+          var name = value.trim();
+          if (!name) return;
+
+          var first = name.charAt(0);
+          var last = name.charAt(name.length - 1);
+          if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
+            name = name.slice(1, -1).trim();
+          }
+
+          if (!name || /^var\\s*\\(/i.test(name)) return;
+
+          var lower = name.toLowerCase();
+          if (
+            lower === 'inherit' ||
+            lower === 'initial' ||
+            lower === 'unset' ||
+            lower === 'revert' ||
+            lower === 'revert-layer'
+          ) {
+            return;
+          }
+
+          if (seen[lower]) return;
+          seen[lower] = true;
+          result.push(name);
+        }
+
+        function addFontFamiliesFromList(list, result, seen) {
+          if (typeof list !== 'string') return;
+
+          var part = '';
+          var quote = null;
+          var parenDepth = 0;
+
+          for (var i = 0; i < list.length; i += 1) {
+            var ch = list.charAt(i);
+            if (quote) {
+              if (ch === quote) quote = null;
+              part += ch;
+              continue;
+            }
+
+            if (ch === '"' || ch === "'") {
+              quote = ch;
+              part += ch;
+              continue;
+            }
+
+            if (ch === '(') {
+              parenDepth += 1;
+              part += ch;
+              continue;
+            }
+
+            if (ch === ')' && parenDepth > 0) {
+              parenDepth -= 1;
+              part += ch;
+              continue;
+            }
+
+            if (ch === ',' && parenDepth === 0) {
+              addFontFamilyValue(part, result, seen);
+              part = '';
+              continue;
+            }
+
+            part += ch;
+          }
+
+          addFontFamilyValue(part, result, seen);
+        }
+
+        function collectPageFontFamilies() {
+          var now = Date.now ? Date.now() : new Date().getTime();
+          if (fontFamiliesCache !== null && now - fontFamiliesCacheTime < 3000) {
+            return fontFamiliesCache.slice();
+          }
+
+          var result = [];
+          var seen = Object.create(null);
+
+          if (document.fonts && typeof document.fonts.forEach === 'function') {
+            try {
+              document.fonts.forEach(function(face) {
+                addFontFamilyValue(face.family, result, seen);
+              });
+            } catch (err) {}
+          }
+
+          var inspectedRules = 0;
+          var maxRules = 1500;
+
+          function walkRules(rules) {
+            if (!rules || inspectedRules >= maxRules) return;
+            for (var i = 0; i < rules.length && inspectedRules < maxRules; i += 1) {
+              inspectedRules += 1;
+              var rule = rules[i];
+              try {
+                if (rule.style) {
+                  addFontFamiliesFromList(
+                    rule.style.fontFamily || rule.style.getPropertyValue('font-family'),
+                    result,
+                    seen
+                  );
+                }
+                if (rule.cssRules) {
+                  walkRules(rule.cssRules);
+                }
+              } catch (err) {}
+            }
+          }
+
+          var sheets = document.styleSheets || [];
+          for (var s = 0; s < sheets.length && inspectedRules < maxRules; s += 1) {
+            try {
+              walkRules(sheets[s].cssRules);
+            } catch (err) {}
+          }
+
+          fontFamiliesCache = result.slice(0, 80);
+          fontFamiliesCacheTime = now;
+          return fontFamiliesCache.slice();
+        }
+
+        function collectAvailableFontFamilies(selectedFontFamily) {
+          var result = [];
+          var seen = Object.create(null);
+          addFontFamiliesFromList(selectedFontFamily, result, seen);
+          collectPageFontFamilies().forEach(function(family) {
+            addFontFamilyValue(family, result, seen);
+          });
+          return result.slice(0, 80);
+        }
+
         __RELATIONSHIP_HELPERS__
         function captureElementData(el) {
           var styles = window.getComputedStyle(el);
@@ -262,6 +412,7 @@ public enum ElementInspectorBridge {
             outerHTML: html,
             cssSelector: buildCSSSelector(el),
             computedStyles: computedStyles,
+            availableFontFamilies: collectAvailableFontFamilies(styles.fontFamily || ''),
             boundingRect: captureBoundingRect(el)__CONTEXT_FIELDS__
           };
         }
@@ -911,6 +1062,16 @@ public enum ElementInspectorBridge {
       )
     }
     return ElementRelationships(count: count, items: items)
+  }
+
+  private static func parseStringArray(from raw: Any?) -> [String] {
+    if let values = raw as? [String] {
+      return values
+    }
+    guard let values = raw as? [Any] else {
+      return []
+    }
+    return values.compactMap { $0 as? String }
   }
 
   private static func parseRect(from body: [String: Any]) -> CGRect {

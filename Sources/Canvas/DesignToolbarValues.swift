@@ -117,6 +117,7 @@ public final class DesignToolbarValues {
   // MARK: Text properties
 
   public var fontFamily: String
+  public var fontFamilyOptions: [String]
   public var color: String
   public var fontSize: Int
   public var isBold: Bool
@@ -168,7 +169,12 @@ public final class DesignToolbarValues {
     self.category = ElementCategory(tagName: element.tagName)
     self.textContent = element.textContent
 
-    self.fontFamily = styles.fontFamily ?? "sans-serif"
+    let resolvedFontFamily = styles.fontFamily ?? "sans-serif"
+    self.fontFamily = resolvedFontFamily
+    self.fontFamilyOptions = Self.makeFontFamilyOptions(
+      currentFontFamily: resolvedFontFamily,
+      availableFontFamilies: element.availableFontFamilies
+    )
     self.color = styles.textColor ?? "rgb(0, 0, 0)"
     self.backgroundColor = styles.backgroundColor ?? "transparent"
 
@@ -216,6 +222,143 @@ public final class DesignToolbarValues {
   static func serializeColor(_ color: NSColor) -> String {
     CSSParser.serializeColor(color)
   }
+
+  static func makeFontFamilyOptions(
+    currentFontFamily: String,
+    availableFontFamilies: [String]
+  ) -> [String] {
+    var options: [String] = []
+    var seen = Set<String>()
+
+    func append(_ family: String, skipGeneric: Bool = false) {
+      guard let normalized = normalizeFontFamily(family) else { return }
+      let key = normalized.lowercased()
+      guard !skipGeneric || !Self.genericFontFamilies.contains(key) else { return }
+      guard seen.insert(key).inserted else { return }
+      options.append(normalized)
+    }
+
+    if let selectedFamily = parseFontFamilyList(currentFontFamily).first {
+      append(selectedFamily)
+    }
+
+    for family in availableFontFamilies {
+      append(family, skipGeneric: true)
+    }
+
+    for family in fallbackFontFamilies {
+      append(family)
+    }
+
+    return options
+  }
+
+  private static func parseFontFamilyList(_ value: String) -> [String] {
+    var families: [String] = []
+    var current = ""
+    var quote: Character?
+    var parenDepth = 0
+
+    func appendCurrent() {
+      if let normalized = normalizeFontFamily(current) {
+        families.append(normalized)
+      }
+      current = ""
+    }
+
+    for character in value {
+      if let activeQuote = quote {
+        if character == activeQuote {
+          quote = nil
+        }
+        current.append(character)
+        continue
+      }
+
+      if character == "\"" || character == "'" {
+        quote = character
+        current.append(character)
+        continue
+      }
+
+      if character == "(" {
+        parenDepth += 1
+        current.append(character)
+        continue
+      }
+
+      if character == ")", parenDepth > 0 {
+        parenDepth -= 1
+        current.append(character)
+        continue
+      }
+
+      if character == ",", parenDepth == 0 {
+        appendCurrent()
+        continue
+      }
+
+      current.append(character)
+    }
+
+    appendCurrent()
+    return families
+  }
+
+  private static func normalizeFontFamily(_ value: String) -> String? {
+    var name = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    if name.hasPrefix("\""), name.hasSuffix("\""), name.count >= 2 {
+      name.removeFirst()
+      name.removeLast()
+      name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    } else if name.hasPrefix("'"), name.hasSuffix("'"), name.count >= 2 {
+      name.removeFirst()
+      name.removeLast()
+      name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    guard !name.isEmpty else { return nil }
+
+    let lowercased = name.lowercased()
+    guard !lowercased.hasPrefix("var("),
+          lowercased != "inherit",
+          lowercased != "initial",
+          lowercased != "unset",
+          lowercased != "revert",
+          lowercased != "revert-layer" else {
+      return nil
+    }
+
+    return name
+  }
+
+  private static let fallbackFontFamilies = [
+    "system-ui",
+    "sans-serif",
+    "serif",
+    "monospace",
+    "Inter",
+    "Helvetica",
+    "Arial",
+    "Georgia",
+    "Times New Roman",
+  ]
+
+  private static let genericFontFamilies: Set<String> = [
+    "serif",
+    "sans-serif",
+    "monospace",
+    "cursive",
+    "fantasy",
+    "system-ui",
+    "ui-serif",
+    "ui-sans-serif",
+    "ui-monospace",
+    "ui-rounded",
+    "emoji",
+    "math",
+    "fangsong",
+  ]
 }
 
 // MARK: - CSSParser
