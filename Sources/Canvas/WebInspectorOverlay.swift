@@ -29,8 +29,10 @@ struct WebInspectorOverlayModifier: ViewModifier {
   @Bindable var state: ElementInspectState
   let inputPlacement: WebInspectInputPlacement
   let onSubmit: ((ElementInspectorData, String) -> Void)?
+  let onSubmitAndSend: ((ElementInspectorData, String) -> Void)?
   let onContextSelection: ((ElementInspectorData) -> Void)?
   let onCropSubmit: ((CGRect, [ElementInspectorData], String) -> Void)?
+  let onCropSubmitAndSend: ((CGRect, [ElementInspectorData], String) -> Void)?
   let onOverlayHoverChange: ((Bool) -> Void)?
   let deactivateOnSubmit: Bool
 
@@ -94,6 +96,7 @@ struct WebInspectorOverlayModifier: ViewModifier {
         WebInspectCropInputOverlay(
           state: state,
           onSubmit: onCropSubmit,
+          onSubmitAndSend: onCropSubmitAndSend,
           deactivateOnSubmit: deactivateOnSubmit
         )
         .opacity(state.isReloading ? 0 : 1)
@@ -109,6 +112,7 @@ struct WebInspectorOverlayModifier: ViewModifier {
               state: state,
               placement: inputPlacement,
               onSubmit: onSubmit,
+              onSubmitAndSend: onSubmitAndSend,
               deactivateOnSubmit: deactivateOnSubmit
             )
 
@@ -153,16 +157,20 @@ public extension View {
   ///   - state: The shared `ElementInspectState` controlling the inspector lifecycle.
   ///   - inputPlacement: Controls where the inspect input editor is placed in input mode.
   ///   - onSubmit: Called with the selected element and the user's instruction when they press Enter (input mode).
+  ///   - onSubmitAndSend: Called with the selected element and the user's instruction when they press Command-Return (input mode).
   ///   - onContextSelection: Called with the selected element immediately on click (context mode).
   ///   - onCropSubmit: Called with the crop rect, captured elements, and the user's instruction when they press Enter (crop mode).
+  ///   - onCropSubmitAndSend: Called with the crop rect, captured elements, and the user's instruction when they press Command-Return (crop mode).
   ///   - onOverlayHoverChange: Called when the pointer enters or exits the inspector overlay chrome.
   ///   - deactivateOnSubmit: Whether input and crop submissions deactivate inspect mode after submit.
   func webInspectorOverlay(
     state: ElementInspectState,
     inputPlacement: WebInspectInputPlacement = .bottom,
     onSubmit: ((ElementInspectorData, String) -> Void)? = nil,
+    onSubmitAndSend: ((ElementInspectorData, String) -> Void)? = nil,
     onContextSelection: ((ElementInspectorData) -> Void)? = nil,
     onCropSubmit: ((CGRect, [ElementInspectorData], String) -> Void)? = nil,
+    onCropSubmitAndSend: ((CGRect, [ElementInspectorData], String) -> Void)? = nil,
     onOverlayHoverChange: ((Bool) -> Void)? = nil,
     deactivateOnSubmit: Bool = true
   ) -> some View {
@@ -170,8 +178,10 @@ public extension View {
       state: state,
       inputPlacement: inputPlacement,
       onSubmit: onSubmit,
+      onSubmitAndSend: onSubmitAndSend,
       onContextSelection: onContextSelection,
       onCropSubmit: onCropSubmit,
+      onCropSubmitAndSend: onCropSubmitAndSend,
       onOverlayHoverChange: onOverlayHoverChange,
       deactivateOnSubmit: deactivateOnSubmit
     ))

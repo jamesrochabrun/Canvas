@@ -13,6 +13,7 @@ import SwiftUI
 struct WebInspectCropInputOverlay: View {
   @Bindable var state: ElementInspectState
   let onSubmit: ((CGRect, [ElementInspectorData], String) -> Void)?
+  let onSubmitAndSend: ((CGRect, [ElementInspectorData], String) -> Void)?
   let deactivateOnSubmit: Bool
 
   @State private var measuredHeight: CGFloat = Self.defaultHeight
@@ -52,6 +53,14 @@ struct WebInspectCropInputOverlay: View {
       elementCount: state.cropElements.count,
       onSubmit: { instruction in
         onSubmit?(cropRect, state.cropElements, instruction)
+        if deactivateOnSubmit {
+          state.deactivate()
+        } else {
+          state.dismissCropRect()
+        }
+      },
+      onSubmitAndSend: { instruction in
+        onSubmitAndSend?(cropRect, state.cropElements, instruction)
         if deactivateOnSubmit {
           state.deactivate()
         } else {
