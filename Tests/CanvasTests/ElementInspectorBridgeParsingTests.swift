@@ -14,6 +14,7 @@ struct ElementInspectorBridgeParsingTests {
       "outerHTML": "<button>Go</button>",
       "cssSelector": "form > button",
       "computedStyles": ["color": "red", "fontSize": "14px"],
+      "availableFontFamilies": ["Inter", "Georgia"],
       "boundingRect": ["x": 10.0, "y": 20.0, "width": 100.0, "height": 40.0],
     ]
     let data = ElementInspectorBridge.parseElementData(dict)
@@ -24,6 +25,7 @@ struct ElementInspectorBridgeParsingTests {
     #expect(data.outerHTML == "<button>Go</button>")
     #expect(data.cssSelector == "form > button")
     #expect(data.computedStyles == ["color": "red", "fontSize": "14px"])
+    #expect(data.availableFontFamilies == ["Inter", "Georgia"])
     #expect(data.boundingRect == CGRect(x: 10, y: 20, width: 100, height: 40))
   }
 
@@ -36,6 +38,7 @@ struct ElementInspectorBridgeParsingTests {
     #expect(data.outerHTML == "")
     #expect(data.cssSelector == "")
     #expect(data.computedStyles == [:])
+    #expect(data.availableFontFamilies == [])
     #expect(data.boundingRect == .zero)
   }
 
@@ -56,6 +59,45 @@ struct ElementInspectorBridgeParsingTests {
     #expect(rect == CGRect(x: 9, y: 11, width: 120, height: 32))
   }
 
+  @Test func parsesSelectedElementDataChangeMessage() {
+    let data = ElementInspectorBridge.parseElementData([
+      "type": "selectedElementDataChange",
+      "tagName": "H3",
+      "textContent": "Updated title",
+      "cssSelector": ".feature > h3",
+      "computedStyles": ["fontSize": "20px"],
+      "boundingRect": ["x": 14.0, "y": 24.0, "width": 220.0, "height": 28.0],
+    ])
+
+    #expect(data.tagName == "H3")
+    #expect(data.textContent == "Updated title")
+    #expect(data.cssSelector == ".feature > h3")
+    #expect(data.computedStyles == ["fontSize": "20px"])
+    #expect(data.boundingRect == CGRect(x: 14, y: 24, width: 220, height: 28))
+  }
+
+  @Test func designEditJavaScriptSerializesEscapedPayload() {
+    let edit = DesignEdit(
+      element: TestFixtures.makeButton(),
+      action: .updateTextContent("Buy \"now\" \\ today\nplease")
+    )
+
+    let script = ElementInspectorBridge.designEditJavaScript(for: edit)
+
+    #expect(script?.hasPrefix("window.__elementInspector?.applyDesignEdit(") == true)
+    #expect(script?.contains(#""type":"updateTextContent""#) == true)
+    #expect(script?.contains(#"Buy \"now\" \\ today\nplease"#) == true)
+  }
+
+  @Test func deleteElementDoesNotProduceLiveEditJavaScript() {
+    let edit = DesignEdit(
+      element: TestFixtures.makeButton(),
+      action: .deleteElement
+    )
+
+    #expect(ElementInspectorBridge.designEditJavaScript(for: edit) == nil)
+  }
+
   @Test func missingSelectionRectDefaultsToZero() {
     let rect = ElementInspectorBridge.parseSelectionRect(["type": "selectionRect"])
     #expect(rect == .zero)
@@ -72,6 +114,22 @@ struct ElementInspectorBridgeParsingTests {
     ]
     let data = ElementInspectorBridge.parseElementData(dict)
     #expect(data.computedStyles.isEmpty)
+  }
+
+  @Test func wrongTypeAvailableFontFamiliesDefaultsToEmptyArray() {
+    let dict: [String: Any] = [
+      "availableFontFamilies": "not an array",
+    ]
+    let data = ElementInspectorBridge.parseElementData(dict)
+    #expect(data.availableFontFamilies.isEmpty)
+  }
+
+  @Test func availableFontFamiliesIgnoresNonStringValues() {
+    let dict: [String: Any] = [
+      "availableFontFamilies": ["Inter", 42, "Georgia"],
+    ]
+    let data = ElementInspectorBridge.parseElementData(dict)
+    #expect(data.availableFontFamilies == ["Inter", "Georgia"])
   }
 
   @Test func wrongTypeBoundingRectDefaultsToZeroRect() {

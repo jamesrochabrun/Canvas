@@ -65,6 +65,7 @@ public enum ElementInspectorBridge {
   /// Parses the dictionary sent from JS `postMessage` into an `ElementInspectorData`.
   public static func parseElementData(_ body: [String: Any]) -> ElementInspectorData {
     let styles = body["computedStyles"] as? [String: String] ?? [:]
+    let availableFontFamilies = parseStringArray(from: body["availableFontFamilies"])
     let rect = parseRect(from: body)
     let parentContext = body["parentContext"] as? [String: Any]
     let parentTagName = parentContext?["tagName"] as? String ?? ""
@@ -80,6 +81,7 @@ public enum ElementInspectorBridge {
       outerHTML: body["outerHTML"] as? String ?? "",
       cssSelector: body["cssSelector"] as? String ?? "",
       computedStyles: styles,
+      availableFontFamilies: availableFontFamilies,
       boundingRect: rect,
       parentTagName: parentTagName,
       parentStyles: parentStyles,
@@ -147,6 +149,49 @@ public enum ElementInspectorBridge {
     ) { _, _ in }
   }
 
+  /// Applies a toolbar design edit to the currently selected DOM element.
+  public static func applyDesignEdit(_ edit: DesignEdit, in webView: WKWebView) {
+    guard let script = designEditJavaScript(for: edit) else { return }
+    webView.evaluateJavaScript(script) { _, _ in }
+  }
+
+  /// Requests a fresh data capture for the currently selected DOM element.
+  public static func refreshSelectedElement(in webView: WKWebView) {
+    webView.evaluateJavaScript("window.__elementInspector?.refreshSelectedElement()") { _, _ in }
+  }
+
+  static func designEditJavaScript(for edit: DesignEdit) -> String? {
+    guard let payload = designEditPayload(for: edit),
+          JSONSerialization.isValidJSONObject(payload),
+          let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
+          let json = String(data: data, encoding: .utf8) else {
+      return nil
+    }
+    return "window.__elementInspector?.applyDesignEdit(\(json))"
+  }
+
+  private static func designEditPayload(for edit: DesignEdit) -> [String: String]? {
+    switch edit.action {
+    case .updateProperty(let property, value: let value):
+      [
+        "type": "updateProperty",
+        "property": property.rawValue,
+        "value": value,
+      ]
+    case .updateTextContent(let value):
+      [
+        "type": "updateTextContent",
+        "value": value,
+      ]
+    case .fitContent:
+      [
+        "type": "fitContent",
+      ]
+    case .deleteElement:
+      nil
+    }
+  }
+
   // MARK: - Inspector JavaScript
 
   // swiftlint:disable:next function_body_length
@@ -169,6 +214,20 @@ public enum ElementInspectorBridge {
         var selectedElement = null;
         var isActive = false;
         var selectionRectFrame = null;
+        var selectedElementDataFrame = null;
+        var selectedElementObserver = null;
+        var fontFamiliesCache = null;
+        var fontFamiliesCacheTime = 0;
+
+        if (
+          document.fonts &&
+          document.fonts.ready &&
+          typeof document.fonts.ready.then === 'function'
+        ) {
+          document.fonts.ready.then(function() {
+            fontFamiliesCache = null;
+          }).catch(function() {});
+        }
 
         function buildCSSSelector(el) {
           var parts = [];
@@ -200,6 +259,142 @@ public enum ElementInspectorBridge {
           return parts.join(' > ') || el.tagName.toLowerCase();
         }
 
+        function addFontFamilyValue(value, result, seen) {
+          if (typeof value !== 'string') return;
+          var name = value.trim();
+          if (!name) return;
+
+          var first = name.charAt(0);
+          var last = name.charAt(name.length - 1);
+          if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
+            name = name.slice(1, -1).trim();
+          }
+
+          if (!name || /^var\\s*\\(/i.test(name)) return;
+
+          var lower = name.toLowerCase();
+          if (
+            lower === 'inherit' ||
+            lower === 'initial' ||
+            lower === 'unset' ||
+            lower === 'revert' ||
+            lower === 'revert-layer'
+          ) {
+            return;
+          }
+
+          if (seen[lower]) return;
+          seen[lower] = true;
+          result.push(name);
+        }
+
+        function addFontFamiliesFromList(list, result, seen) {
+          if (typeof list !== 'string') return;
+
+          var part = '';
+          var quote = null;
+          var parenDepth = 0;
+
+          for (var i = 0; i < list.length; i += 1) {
+            var ch = list.charAt(i);
+            if (quote) {
+              if (ch === quote) quote = null;
+              part += ch;
+              continue;
+            }
+
+            if (ch === '"' || ch === "'") {
+              quote = ch;
+              part += ch;
+              continue;
+            }
+
+            if (ch === '(') {
+              parenDepth += 1;
+              part += ch;
+              continue;
+            }
+
+            if (ch === ')' && parenDepth > 0) {
+              parenDepth -= 1;
+              part += ch;
+              continue;
+            }
+
+            if (ch === ',' && parenDepth === 0) {
+              addFontFamilyValue(part, result, seen);
+              part = '';
+              continue;
+            }
+
+            part += ch;
+          }
+
+          addFontFamilyValue(part, result, seen);
+        }
+
+        function collectPageFontFamilies() {
+          var now = Date.now ? Date.now() : new Date().getTime();
+          if (fontFamiliesCache !== null && now - fontFamiliesCacheTime < 3000) {
+            return fontFamiliesCache.slice();
+          }
+
+          var result = [];
+          var seen = Object.create(null);
+
+          if (document.fonts && typeof document.fonts.forEach === 'function') {
+            try {
+              document.fonts.forEach(function(face) {
+                addFontFamilyValue(face.family, result, seen);
+              });
+            } catch (err) {}
+          }
+
+          var inspectedRules = 0;
+          var maxRules = 1500;
+
+          function walkRules(rules) {
+            if (!rules || inspectedRules >= maxRules) return;
+            for (var i = 0; i < rules.length && inspectedRules < maxRules; i += 1) {
+              inspectedRules += 1;
+              var rule = rules[i];
+              try {
+                if (rule.style) {
+                  addFontFamiliesFromList(
+                    rule.style.fontFamily || rule.style.getPropertyValue('font-family'),
+                    result,
+                    seen
+                  );
+                }
+                if (rule.cssRules) {
+                  walkRules(rule.cssRules);
+                }
+              } catch (err) {}
+            }
+          }
+
+          var sheets = document.styleSheets || [];
+          for (var s = 0; s < sheets.length && inspectedRules < maxRules; s += 1) {
+            try {
+              walkRules(sheets[s].cssRules);
+            } catch (err) {}
+          }
+
+          fontFamiliesCache = result.slice(0, 80);
+          fontFamiliesCacheTime = now;
+          return fontFamiliesCache.slice();
+        }
+
+        function collectAvailableFontFamilies(selectedFontFamily) {
+          var result = [];
+          var seen = Object.create(null);
+          addFontFamiliesFromList(selectedFontFamily, result, seen);
+          collectPageFontFamilies().forEach(function(family) {
+            addFontFamilyValue(family, result, seen);
+          });
+          return result.slice(0, 80);
+        }
+
         __RELATIONSHIP_HELPERS__
         function captureElementData(el) {
           var styles = window.getComputedStyle(el);
@@ -217,6 +412,7 @@ public enum ElementInspectorBridge {
             outerHTML: html,
             cssSelector: buildCSSSelector(el),
             computedStyles: computedStyles,
+            availableFontFamilies: collectAvailableFontFamilies(styles.fontFamily || ''),
             boundingRect: captureBoundingRect(el)__CONTEXT_FIELDS__
           };
         }
@@ -283,6 +479,7 @@ public enum ElementInspectorBridge {
           e.preventDefault();
           e.stopPropagation();
           selectedElement = e.target;
+          observeSelectedElement(selectedElement);
           highlightElement(selectedElement);
           var data = captureElementData(e.target);
           try {
@@ -295,8 +492,51 @@ public enum ElementInspectorBridge {
             window.cancelAnimationFrame(selectionRectFrame);
             selectionRectFrame = null;
           }
+          disconnectSelectedElementObserver();
           selectedElement = null;
           if (currentTarget) highlightElement(currentTarget);
+        }
+
+        function disconnectSelectedElementObserver() {
+          if (selectedElementObserver !== null) {
+            selectedElementObserver.disconnect();
+            selectedElementObserver = null;
+          }
+          if (selectedElementDataFrame !== null) {
+            window.cancelAnimationFrame(selectedElementDataFrame);
+            selectedElementDataFrame = null;
+          }
+        }
+
+        function observeSelectedElement(el) {
+          disconnectSelectedElementObserver();
+          if (!el || typeof MutationObserver === 'undefined') return;
+          selectedElementObserver = new MutationObserver(function() {
+            scheduleSelectedElementDataPost();
+          });
+          selectedElementObserver.observe(el, {
+            attributes: true,
+            characterData: true,
+            childList: true,
+            subtree: true
+          });
+        }
+
+        function postSelectedElementData() {
+          if (!selectedElement) return;
+          var data = captureElementData(selectedElement);
+          data.type = 'selectedElementDataChange';
+          try {
+            window.webkit.messageHandlers.elementInspector.postMessage(data);
+          } catch(err) {}
+        }
+
+        function scheduleSelectedElementDataPost() {
+          if (!selectedElement || selectedElementDataFrame !== null) return;
+          selectedElementDataFrame = window.requestAnimationFrame(function() {
+            selectedElementDataFrame = null;
+            postSelectedElementData();
+          });
         }
 
         function postSelectedRect() {
@@ -327,6 +567,7 @@ public enum ElementInspectorBridge {
           if (!selectedElement) return;
           highlightElement(selectedElement);
           scheduleSelectedRectPost();
+          scheduleSelectedElementDataPost();
         }
 
         function activate() {
@@ -355,6 +596,7 @@ public enum ElementInspectorBridge {
             window.cancelAnimationFrame(selectionRectFrame);
             selectionRectFrame = null;
           }
+          disconnectSelectedElementObserver();
           currentTarget = null;
           selectedElement = null;
         }
@@ -369,7 +611,130 @@ public enum ElementInspectorBridge {
             }
           }
           if (!el) return;
+          selectedElement = el;
+          currentTarget = el;
+          observeSelectedElement(selectedElement);
+          createOverlay();
+          highlightElement(selectedElement);
+          scheduleSelectedElementDataPost();
           el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          window.setTimeout(function() {
+            if (selectedElement === el) {
+              highlightElement(selectedElement);
+              scheduleSelectedRectPost();
+              scheduleSelectedElementDataPost();
+            }
+          }, 400);
+        }
+
+        function applyDesignEdit(edit) {
+          if (!selectedElement || !edit || typeof edit.type !== 'string') return;
+
+          if (edit.type === 'updateProperty') {
+            if (!edit.property || typeof edit.property !== 'string') return;
+            var propertyValue = edit.value == null ? '' : String(edit.value);
+            if (propertyValue.trim() === '') {
+              selectedElement.style.removeProperty(edit.property);
+            } else {
+              selectedElement.style.setProperty(edit.property, propertyValue);
+            }
+          } else if (edit.type === 'updateTextContent') {
+            replaceTextContentPreservingStructure(selectedElement, edit.value == null ? '' : String(edit.value));
+          } else if (edit.type === 'fitContent') {
+            selectedElement.style.setProperty('width', 'fit-content');
+            selectedElement.style.setProperty('height', 'fit-content');
+          } else {
+            return;
+          }
+
+          highlightElement(selectedElement);
+          scheduleSelectedRectPost();
+          scheduleSelectedElementDataPost();
+        }
+
+        function replaceTextContentPreservingStructure(el, nextText) {
+          var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+          var nodes = [];
+          var node;
+          while ((node = walker.nextNode())) {
+            nodes.push(node);
+          }
+
+          if (nodes.length === 0) {
+            el.textContent = nextText;
+            return;
+          }
+
+          var oldText = nodes.map(function(textNode) {
+            return textNode.nodeValue || '';
+          }).join('');
+          var splice = textSplice(oldText, nextText);
+          if (!splice) return;
+
+          if (splice.start === oldText.length) {
+            var appendTarget = oldText.length === 0 ? nodes[0] : nodes[nodes.length - 1];
+            appendTarget.nodeValue = (appendTarget.nodeValue || '') + splice.replacement;
+            return;
+          }
+
+          var offset = 0;
+          var inserted = false;
+          for (var i = 0; i < nodes.length; i += 1) {
+            var textNode = nodes[i];
+            var text = textNode.nodeValue || '';
+            var start = offset;
+            var end = offset + text.length;
+            offset = end;
+
+            if (end < splice.start || start > splice.end) continue;
+
+            var localStart = Math.max(0, splice.start - start);
+            var localEnd = Math.min(text.length, splice.end - start);
+            if (!inserted) {
+              textNode.nodeValue = text.slice(0, localStart) + splice.replacement + text.slice(localEnd);
+              inserted = true;
+            } else {
+              textNode.nodeValue = text.slice(localEnd);
+            }
+          }
+
+          if (!inserted) {
+            nodes[nodes.length - 1].nodeValue = (nodes[nodes.length - 1].nodeValue || '') + splice.replacement;
+          }
+        }
+
+        function textSplice(oldText, nextText) {
+          if (oldText === nextText) return null;
+
+          var prefix = 0;
+          var maxPrefix = Math.min(oldText.length, nextText.length);
+          while (prefix < maxPrefix && oldText.charAt(prefix) === nextText.charAt(prefix)) {
+            prefix += 1;
+          }
+
+          var oldSuffix = oldText.length;
+          var nextSuffix = nextText.length;
+          while (
+            oldSuffix > prefix &&
+            nextSuffix > prefix &&
+            oldText.charAt(oldSuffix - 1) === nextText.charAt(nextSuffix - 1)
+          ) {
+            oldSuffix -= 1;
+            nextSuffix -= 1;
+          }
+
+          return {
+            start: prefix,
+            end: oldSuffix,
+            replacement: nextText.slice(prefix, nextSuffix)
+          };
+        }
+
+        function refreshSelectedElement() {
+          if (!selectedElement) return;
+          highlightElement(selectedElement);
+          scheduleSelectedRectPost();
+          scheduleSelectedElementDataPost();
         }
 
         // --- Crop mode (drag-to-select region) ---
@@ -603,7 +968,17 @@ public enum ElementInspectorBridge {
           }
         }
 
-        window.__elementInspector = { activate: activate, deactivate: deactivate, clearSelection: clearSelection, scrollToAndSelect: scrollToAndSelect, activateCrop: activateCrop, deactivateCrop: deactivateCrop, clearCropSelection: clearCropSelection };
+        window.__elementInspector = {
+          activate: activate,
+          deactivate: deactivate,
+          clearSelection: clearSelection,
+          scrollToAndSelect: scrollToAndSelect,
+          applyDesignEdit: applyDesignEdit,
+          refreshSelectedElement: refreshSelectedElement,
+          activateCrop: activateCrop,
+          deactivateCrop: deactivateCrop,
+          clearCropSelection: clearCropSelection
+        };
       })();
       """
 
@@ -687,6 +1062,16 @@ public enum ElementInspectorBridge {
       )
     }
     return ElementRelationships(count: count, items: items)
+  }
+
+  private static func parseStringArray(from raw: Any?) -> [String] {
+    if let values = raw as? [String] {
+      return values
+    }
+    guard let values = raw as? [Any] else {
+      return []
+    }
+    return values.compactMap { $0 as? String }
   }
 
   private static func parseRect(from body: [String: Any]) -> CGRect {

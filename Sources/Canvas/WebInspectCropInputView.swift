@@ -12,7 +12,7 @@ import SwiftUI
 /// Compact floating editor shown at the bottom of the web preview after a crop region is selected.
 ///
 /// Displays an orange "Region" badge, crop dimensions, and a text field for the user to describe
-/// the change they want. Enter submits; Escape dismisses.
+/// the change they want. Return queues, Command-Return sends immediately, and Escape dismisses.
 public struct WebInspectCropInputView: View {
 
   // MARK: Lifecycle
@@ -21,11 +21,13 @@ public struct WebInspectCropInputView: View {
     cropRect: CGRect,
     elementCount: Int = 0,
     onSubmit: @escaping (String) -> Void,
+    onSubmitAndSend: ((String) -> Void)? = nil,
     onDismiss: @escaping () -> Void
   ) {
     self.cropRect = cropRect
     self.elementCount = elementCount
     self.onSubmit = onSubmit
+    self.onSubmitAndSend = onSubmitAndSend
     self.onDismiss = onDismiss
   }
 
@@ -34,6 +36,7 @@ public struct WebInspectCropInputView: View {
   let cropRect: CGRect
   let elementCount: Int
   let onSubmit: (String) -> Void
+  let onSubmitAndSend: ((String) -> Void)?
   let onDismiss: () -> Void
 
   public var body: some View {
@@ -98,7 +101,10 @@ public struct WebInspectCropInputView: View {
   private var inputRow: some View {
     HStack(alignment: .bottom, spacing: 8) {
       textEditorView
-      sendButton
+      queueButton
+      if onSubmitAndSend != nil {
+        sendNowButton
+      }
     }
   }
 
@@ -126,23 +132,48 @@ public struct WebInspectCropInputView: View {
       )
   }
 
-  private var sendButton: some View {
+  private var queueButton: some View {
     Button(action: submitMessage) {
-      Image(systemName: "arrow.up")
-        .font(.system(size: 13, weight: .semibold))
+      Label("Queue", systemImage: "tray.and.arrow.down.fill")
+        .font(.system(size: 12, weight: .semibold))
         .foregroundColor(.white)
-        .frame(width: 28, height: 28)
-        .contentShape(Circle())
+        .padding(.horizontal, 10)
+        .frame(height: 28)
+        .contentShape(RoundedRectangle(cornerRadius: 8))
     }
     .buttonStyle(.plain)
-    .frame(width: 28, height: 28)
     .background(
-      Circle()
+      RoundedRectangle(cornerRadius: 8)
         .fill(isTextEmpty ? Color.secondary.opacity(0.3) : Color.accentColor)
     )
-    .contentShape(Circle())
+    .contentShape(RoundedRectangle(cornerRadius: 8))
     .disabled(isTextEmpty)
-    .help("Send to Claude (Enter)")
+    .help("Queue update (Return)")
+  }
+
+  private var sendNowButton: some View {
+    Button(action: sendMessageNow) {
+      HStack(spacing: 4) {
+        Image(systemName: "paperplane.fill")
+          .font(.system(size: 12, weight: .semibold))
+        Text("Send")
+          .font(.system(size: 12, weight: .semibold))
+        Text("⌘ ↩")
+          .font(.system(size: 10, weight: .semibold, design: .monospaced))
+      }
+      .foregroundColor(.white)
+      .padding(.horizontal, 9)
+      .frame(height: 28)
+      .contentShape(RoundedRectangle(cornerRadius: 8))
+    }
+    .buttonStyle(.plain)
+    .background(
+      RoundedRectangle(cornerRadius: 8)
+        .fill(isTextEmpty ? Color.secondary.opacity(0.3) : Color.accentColor)
+    )
+    .contentShape(RoundedRectangle(cornerRadius: 8))
+    .disabled(isTextEmpty)
+    .help("Send now (Command-Return)")
   }
 
   private var isTextEmpty: Bool {
@@ -156,11 +187,26 @@ public struct WebInspectCropInputView: View {
     onSubmit(instruction)
   }
 
+  private func sendMessageNow() {
+    guard !isTextEmpty else { return }
+    guard let onSubmitAndSend else {
+      submitMessage()
+      return
+    }
+    let instruction = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    text = ""
+    onSubmitAndSend(instruction)
+  }
+
   private func handleKeyPress(_ key: KeyPress) -> KeyPress.Result {
     switch key.key {
     case .return:
       if key.modifiers.contains(.shift) {
         return .ignored
+      }
+      if key.modifiers.contains(.command) {
+        sendMessageNow()
+        return .handled
       }
       submitMessage()
       return .handled
