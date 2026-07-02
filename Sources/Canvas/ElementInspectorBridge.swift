@@ -194,8 +194,18 @@ public enum ElementInspectorBridge {
 
   // MARK: - Inspector JavaScript
 
+  /// CSS selectors used to locate a same-origin `<iframe>` hosting the actual
+  /// content to inspect. When such a frame is present and its document is
+  /// accessible, inspection targets that document instead of the top one;
+  /// otherwise behavior is unchanged. Hosts can opt in generically by tagging
+  /// their frame with `data-canvas-content-frame`.
+  static let defaultContentFrameSelectors = [
+    "iframe.kyber-dev-ui__iframe",
+    "iframe[data-canvas-content-frame]",
+  ]
+
   // swiftlint:disable:next function_body_length
-  private static func inspectorJS(for dataLevel: ElementInspectorDataLevel) -> String {
+  static func inspectorJS(for dataLevel: ElementInspectorDataLevel) -> String {
     let styleKeys = javaScriptArrayLiteral(dataLevel.styleKeys)
     let relationshipHelpers = dataLevel.includesExtendedContext ? fullRelationshipHelpers : ""
     let parentContextCapture = dataLevel.includesExtendedContext ? fullParentContextCapture : "        var parentData = null;"
@@ -219,6 +229,69 @@ public enum ElementInspectorBridge {
         var fontFamiliesCache = null;
         var fontFamiliesCacheTime = 0;
 
+        // --- Content-frame targeting ---
+        // When the top document is only a shell around a same-origin iframe that
+        // hosts the real content, inspection targets the iframe's document.
+        // Rects posted to native code are translated back into top-frame
+        // viewport coordinates.
+        var CONTENT_FRAME_SELECTORS = \(javaScriptArrayLiteral(defaultContentFrameSelectors));
+        var ctx = null;                 // { doc, win, frameEl } resolved lazily
+        var elementListenersCtx = null; // { doc, win } element-mode listeners are bound to
+        var cropListenersCtx = null;    // { doc, win } crop-mode listeners are bound to
+        var cropScrollCtx = null;       // { win } crop scroll/resize listeners are bound to
+        var frameLoadEl = null;         // frame element carrying the 'load' listener
+        var frameResizeObserver = null;
+
+        function findContentFrame() {
+          for (var i = 0; i < CONTENT_FRAME_SELECTORS.length; i += 1) {
+            var frame = null;
+            try { frame = document.querySelector(CONTENT_FRAME_SELECTORS[i]); } catch (err) {}
+            if (frame) return frame;
+          }
+          return null;
+        }
+
+        function resolveInspectionContext() {
+          var frame = findContentFrame();
+          if (frame) {
+            try {
+              var frameDoc = frame.contentDocument;
+              var frameWin = frame.contentWindow;
+              if (frameDoc && frameWin) {
+                return { doc: frameDoc, win: frameWin, frameEl: frame };
+              }
+            } catch (err) {}
+            // Cross-origin or detached frame: fall back to top-document inspection.
+          }
+          return { doc: document, win: window, frameEl: null };
+        }
+
+        function inspectedDoc() { return (ctx && ctx.doc) ? ctx.doc : document; }
+        function inspectedWin() { return (ctx && ctx.win) ? ctx.win : window; }
+
+        function getComputedStyleFor(el) {
+          var view = (el.ownerDocument && el.ownerDocument.defaultView) || window;
+          return view.getComputedStyle(el);
+        }
+
+        function frameContentOffset() {
+          if (!ctx || !ctx.frameEl) return { x: 0, y: 0 };
+          try {
+            var r = ctx.frameEl.getBoundingClientRect();
+            return {
+              x: r.left + (ctx.frameEl.clientLeft || 0),
+              y: r.top + (ctx.frameEl.clientTop || 0)
+            };
+          } catch (err) {
+            return { x: 0, y: 0 };
+          }
+        }
+
+        function toTopViewportRect(rect) {
+          var offset = frameContentOffset();
+          return { x: rect.x + offset.x, y: rect.y + offset.y, width: rect.width, height: rect.height };
+        }
+
         if (
           document.fonts &&
           document.fonts.ready &&
@@ -233,7 +306,8 @@ public enum ElementInspectorBridge {
           var parts = [];
           var node = el;
           var maxDepth = 8;
-          while (node && node !== document.body && parts.length < maxDepth) {
+          var rootBody = (el.ownerDocument || document).body;
+          while (node && node !== rootBody && parts.length < maxDepth) {
             var part = node.tagName.toLowerCase();
             if (node.id) {
               part = '#' + node.id;
@@ -341,10 +415,11 @@ public enum ElementInspectorBridge {
 
           var result = [];
           var seen = Object.create(null);
+          var doc = inspectedDoc();
 
-          if (document.fonts && typeof document.fonts.forEach === 'function') {
+          if (doc.fonts && typeof doc.fonts.forEach === 'function') {
             try {
-              document.fonts.forEach(function(face) {
+              doc.fonts.forEach(function(face) {
                 addFontFamilyValue(face.family, result, seen);
               });
             } catch (err) {}
@@ -373,7 +448,7 @@ public enum ElementInspectorBridge {
             }
           }
 
-          var sheets = document.styleSheets || [];
+          var sheets = doc.styleSheets || [];
           for (var s = 0; s < sheets.length && inspectedRules < maxRules; s += 1) {
             try {
               walkRules(sheets[s].cssRules);
@@ -397,7 +472,7 @@ public enum ElementInspectorBridge {
 
         __RELATIONSHIP_HELPERS__
         function captureElementData(el) {
-          var styles = window.getComputedStyle(el);
+          var styles = getComputedStyleFor(el);
           var styleKeys = \(styleKeys);
           var computedStyles = {};
           styleKeys.forEach(function(k) { computedStyles[k] = styles[k] || ''; });
@@ -419,12 +494,19 @@ public enum ElementInspectorBridge {
 
         function captureBoundingRect(el) {
           var rect = el.getBoundingClientRect();
-          return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+          // Native code expects top-frame viewport coordinates (WKWebView points).
+          return toTopViewportRect({ x: rect.x, y: rect.y, width: rect.width, height: rect.height });
         }
 
         function createOverlay() {
+          var doc = inspectedDoc();
+          if (overlay && overlay.ownerDocument !== doc) {
+            try { overlay.remove(); } catch (err) {}
+            overlay = null;
+            tagLabel = null;
+          }
           if (overlay) return;
-          overlay = document.createElement('div');
+          overlay = doc.createElement('div');
           overlay.style.cssText = [
             'position:fixed',
             'pointer-events:none',
@@ -436,7 +518,7 @@ public enum ElementInspectorBridge {
             'transition:all 0.08s ease',
             'display:none'
           ].join(';');
-          tagLabel = document.createElement('span');
+          tagLabel = doc.createElement('span');
           tagLabel.style.cssText = [
             'position:absolute',
             'bottom:100%',
@@ -451,7 +533,7 @@ public enum ElementInspectorBridge {
             'white-space:nowrap'
           ].join(';');
           overlay.appendChild(tagLabel);
-          document.body.appendChild(overlay);
+          if (doc.body) doc.body.appendChild(overlay);
         }
 
         function highlightElement(el) {
@@ -570,25 +652,154 @@ public enum ElementInspectorBridge {
           scheduleSelectedElementDataPost();
         }
 
+        function attachElementListeners() {
+          if (!ctx || !ctx.doc || elementListenersCtx) return;
+          var d = ctx.doc;
+          var w = ctx.win;
+          d.addEventListener('mousemove', onMouseMove, true);
+          d.addEventListener('click', onClick, true);
+          w.addEventListener('scroll', onScroll, { capture: true, passive: true });
+          w.addEventListener('resize', onResize, { passive: true });
+          if (w !== window) {
+            // Top-frame scroll/resize moves the content frame itself, which
+            // shifts the translated rects delivered to native code.
+            window.addEventListener('scroll', onScroll, { capture: true, passive: true });
+            window.addEventListener('resize', onResize, { passive: true });
+          }
+          try { if (d.body) d.body.style.cursor = 'crosshair'; } catch (err) {}
+          elementListenersCtx = { doc: d, win: w };
+        }
+
+        function detachElementListeners() {
+          if (!elementListenersCtx) return;
+          var d = elementListenersCtx.doc;
+          var w = elementListenersCtx.win;
+          try {
+            d.removeEventListener('mousemove', onMouseMove, true);
+            d.removeEventListener('click', onClick, true);
+            if (d.body) d.body.style.cursor = '';
+          } catch (err) {}
+          try {
+            w.removeEventListener('scroll', onScroll, true);
+            w.removeEventListener('resize', onResize);
+          } catch (err) {}
+          if (w !== window) {
+            window.removeEventListener('scroll', onScroll, true);
+            window.removeEventListener('resize', onResize);
+          }
+          elementListenersCtx = null;
+        }
+
+        function onFrameLoad() {
+          detachElementListeners();
+          detachCropListeners();
+          removeCropScrollListeners();
+          // Overlay nodes belonged to the unloaded document; recreate lazily.
+          overlay = null;
+          tagLabel = null;
+          cropOverlay = null;
+          currentTarget = null;
+          selectedElement = null;
+          isCropDragging = false;
+          disconnectSelectedElementObserver();
+          if (selectionRectFrame !== null) {
+            window.cancelAnimationFrame(selectionRectFrame);
+            selectionRectFrame = null;
+          }
+          fontFamiliesCache = null;
+          ctx = resolveInspectionContext();
+          ensureFrameObservers();
+          if (isActive) {
+            createOverlay();
+            attachElementListeners();
+          }
+          if (cropModeActive) {
+            createCropOverlay();
+            attachCropListeners();
+          }
+        }
+
+        function onFrameLayoutChange() {
+          onResize();
+          onCropResize();
+        }
+
+        // When activation happens before the host shell has rendered the
+        // content frame, listeners land on the top document. Watch for the
+        // frame to appear and rebind the moment it does, without needing the
+        // user to toggle inspection off and on. childList-only keeps the
+        // observer quiet during overlay updates.
+        var frameWatchObserver = null;
+
+        function watchForContentFrame() {
+          if (frameWatchObserver || typeof MutationObserver === 'undefined') return;
+          frameWatchObserver = new MutationObserver(function() {
+            if (!isActive && !cropModeActive) {
+              stopWatchingForContentFrame();
+              return;
+            }
+            if (!findContentFrame()) return;
+            stopWatchingForContentFrame();
+            onFrameLoad();
+          });
+          frameWatchObserver.observe(document.documentElement, { childList: true, subtree: true });
+        }
+
+        function stopWatchingForContentFrame() {
+          if (frameWatchObserver) {
+            frameWatchObserver.disconnect();
+            frameWatchObserver = null;
+          }
+        }
+
+        function watchForContentFrameIfMissing() {
+          if (!ctx || ctx.frameEl || findContentFrame()) return;
+          watchForContentFrame();
+        }
+
+        function ensureFrameObservers() {
+          if (!ctx || !ctx.frameEl || frameLoadEl === ctx.frameEl) return;
+          removeFrameObservers();
+          frameLoadEl = ctx.frameEl;
+          frameLoadEl.addEventListener('load', onFrameLoad);
+          if (typeof ResizeObserver !== 'undefined') {
+            frameResizeObserver = new ResizeObserver(onFrameLayoutChange);
+            frameResizeObserver.observe(frameLoadEl);
+          }
+        }
+
+        function removeFrameObservers() {
+          if (frameLoadEl) {
+            frameLoadEl.removeEventListener('load', onFrameLoad);
+            frameLoadEl = null;
+          }
+          if (frameResizeObserver) {
+            frameResizeObserver.disconnect();
+            frameResizeObserver = null;
+          }
+        }
+
+        function removeFrameObserversIfIdle() {
+          if (!isActive && !cropModeActive) {
+            removeFrameObservers();
+            stopWatchingForContentFrame();
+          }
+        }
+
         function activate() {
           if (isActive) return;
           isActive = true;
+          ctx = resolveInspectionContext();
+          ensureFrameObservers();
+          watchForContentFrameIfMissing();
           createOverlay();
-          document.addEventListener('mousemove', onMouseMove, true);
-          document.addEventListener('click', onClick, true);
-          window.addEventListener('scroll', onScroll, { capture: true, passive: true });
-          window.addEventListener('resize', onResize, { passive: true });
-          document.body.style.cursor = 'crosshair';
+          attachElementListeners();
         }
 
         function deactivate() {
           if (!isActive) return;
           isActive = false;
-          document.removeEventListener('mousemove', onMouseMove, true);
-          document.removeEventListener('click', onClick, true);
-          window.removeEventListener('scroll', onScroll, true);
-          window.removeEventListener('resize', onResize);
-          document.body.style.cursor = '';
+          detachElementListeners();
           if (overlay) {
             overlay.style.display = 'none';
           }
@@ -599,15 +810,19 @@ public enum ElementInspectorBridge {
           disconnectSelectedElementObserver();
           currentTarget = null;
           selectedElement = null;
+          removeFrameObserversIfIdle();
         }
 
         function scrollToAndSelect(selector) {
+          if (!ctx) ctx = resolveInspectionContext();
+          ensureFrameObservers();
+          var doc = inspectedDoc();
           var el;
-          try { el = document.querySelector(selector); } catch(e) {}
+          try { el = doc.querySelector(selector); } catch(e) {}
           if (!el) {
             var simplified = selector.replace(/:[a-z-]+\\([^)]*\\)/g, '').replace(/\\.(?:visible|active|show|open|loaded|animated|entered|in-view)\\b/g, '').replace(/\\s*>\\s*>/g, ' > ').trim();
             if (simplified && simplified !== selector) {
-              try { el = document.querySelector(simplified); } catch(e2) {}
+              try { el = doc.querySelector(simplified); } catch(e2) {}
             }
           }
           if (!el) return;
@@ -653,7 +868,7 @@ public enum ElementInspectorBridge {
         }
 
         function replaceTextContentPreservingStructure(el, nextText) {
-          var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+          var walker = (el.ownerDocument || document).createTreeWalker(el, NodeFilter.SHOW_TEXT);
           var nodes = [];
           var node;
           while ((node = walker.nextNode())) {
@@ -762,13 +977,14 @@ public enum ElementInspectorBridge {
           var crop = { x: cx, y: cy, width: cw, height: ch };
           var skipTags = { SCRIPT:1, STYLE:1, HEAD:1, META:1, LINK:1, BR:1, NOSCRIPT:1 };
           var candidates = [];
-          var all = document.body.querySelectorAll('*');
+          var doc = inspectedDoc();
+          var all = doc.body.querySelectorAll('*');
 
           for (var i = 0; i < all.length; i++) {
             var el = all[i];
             if (el === cropOverlay) continue;
             if (skipTags[el.tagName]) continue;
-            var s = window.getComputedStyle(el);
+            var s = getComputedStyleFor(el);
             if (s.display === 'none' || s.visibility === 'hidden') continue;
             var r = el.getBoundingClientRect();
             if (r.width === 0 || r.height === 0) continue;
@@ -791,9 +1007,9 @@ public enum ElementInspectorBridge {
           });
 
           if (filtered.length === 0) {
-            var centerEl = document.elementFromPoint(cx + cw / 2, cy + ch / 2);
+            var centerEl = doc.elementFromPoint(cx + cw / 2, cy + ch / 2);
             var ancestor = centerEl;
-            while (ancestor && ancestor !== document.body && ancestor !== document.documentElement) {
+            while (ancestor && ancestor !== doc.body && ancestor !== doc.documentElement) {
               if (ancestor === cropOverlay) { ancestor = ancestor.parentElement; continue; }
               if (skipTags[ancestor.tagName]) { ancestor = ancestor.parentElement; continue; }
               var ar = ancestor.getBoundingClientRect();
@@ -804,7 +1020,7 @@ public enum ElementInspectorBridge {
               }
               ancestor = ancestor.parentElement;
             }
-            if (centerEl && centerEl !== cropOverlay && centerEl !== document.body) {
+            if (centerEl && centerEl !== cropOverlay && centerEl !== doc.body) {
               return [centerEl];
             }
             return [];
@@ -819,12 +1035,13 @@ public enum ElementInspectorBridge {
         }
 
         function postCropRectUpdate() {
-          var vx = cropDocX - window.scrollX;
-          var vy = cropDocY - window.scrollY;
+          var w = inspectedWin();
+          var vx = cropDocX - w.scrollX;
+          var vy = cropDocY - w.scrollY;
           try {
             window.webkit.messageHandlers.elementInspector.postMessage({
               type: 'cropRectUpdate',
-              boundingRect: { x: vx, y: vy, width: cropWidth, height: cropHeight }
+              boundingRect: toTopViewportRect({ x: vx, y: vy, width: cropWidth, height: cropHeight })
             });
           } catch(err) {}
         }
@@ -839,8 +1056,9 @@ public enum ElementInspectorBridge {
 
         function onCropScroll() {
           if (!cropOverlay || cropOverlay.style.display === 'none') return;
-          var vx = cropDocX - window.scrollX;
-          var vy = cropDocY - window.scrollY;
+          var w = inspectedWin();
+          var vx = cropDocX - w.scrollX;
+          var vy = cropDocY - w.scrollY;
           cropOverlay.style.left = vx + 'px';
           cropOverlay.style.top = vy + 'px';
           scheduleCropRectPost();
@@ -851,9 +1069,30 @@ public enum ElementInspectorBridge {
           scheduleCropRectPost();
         }
 
+        function addCropScrollListeners() {
+          removeCropScrollListeners();
+          var w = inspectedWin();
+          w.addEventListener('scroll', onCropScroll, { capture: true, passive: true });
+          w.addEventListener('resize', onCropResize, { passive: true });
+          if (w !== window) {
+            window.addEventListener('scroll', onCropScroll, { capture: true, passive: true });
+            window.addEventListener('resize', onCropResize, { passive: true });
+          }
+          cropScrollCtx = { win: w };
+        }
+
         function removeCropScrollListeners() {
-          window.removeEventListener('scroll', onCropScroll, true);
-          window.removeEventListener('resize', onCropResize);
+          if (cropScrollCtx) {
+            try {
+              cropScrollCtx.win.removeEventListener('scroll', onCropScroll, true);
+              cropScrollCtx.win.removeEventListener('resize', onCropResize);
+            } catch (err) {}
+            if (cropScrollCtx.win !== window) {
+              window.removeEventListener('scroll', onCropScroll, true);
+              window.removeEventListener('resize', onCropResize);
+            }
+            cropScrollCtx = null;
+          }
           if (cropRectFrame !== null) {
             window.cancelAnimationFrame(cropRectFrame);
             cropRectFrame = null;
@@ -861,8 +1100,13 @@ public enum ElementInspectorBridge {
         }
 
         function createCropOverlay() {
+          var doc = inspectedDoc();
+          if (cropOverlay && cropOverlay.ownerDocument !== doc) {
+            try { cropOverlay.remove(); } catch (err) {}
+            cropOverlay = null;
+          }
           if (cropOverlay) return;
-          cropOverlay = document.createElement('div');
+          cropOverlay = doc.createElement('div');
           cropOverlay.style.cssText = [
             'position:fixed',
             'pointer-events:none',
@@ -873,7 +1117,7 @@ public enum ElementInspectorBridge {
             'border-radius:3px',
             'display:none'
           ].join(';');
-          document.body.appendChild(cropOverlay);
+          if (doc.body) doc.body.appendChild(cropOverlay);
         }
 
         function onCropMouseDown(e) {
@@ -914,12 +1158,12 @@ public enum ElementInspectorBridge {
           var w = Math.abs(e.clientX - cropStartX);
           var h = Math.abs(e.clientY - cropStartY);
           if (w > 5 && h > 5) {
-            cropDocX = x + window.scrollX;
-            cropDocY = y + window.scrollY;
+            var win = inspectedWin();
+            cropDocX = x + win.scrollX;
+            cropDocY = y + win.scrollY;
             cropWidth = w;
             cropHeight = h;
-            window.addEventListener('scroll', onCropScroll, { capture: true, passive: true });
-            window.addEventListener('resize', onCropResize, { passive: true });
+            addCropScrollListeners();
             var elementsInRect = findElementsInRect(x, y, w, h);
             var elementDataArray = elementsInRect.map(function(el) {
               return captureElementData(el);
@@ -927,7 +1171,7 @@ public enum ElementInspectorBridge {
             try {
               window.webkit.messageHandlers.elementInspector.postMessage({
                 type: 'cropRect',
-                boundingRect: { x: x, y: y, width: w, height: h },
+                boundingRect: toTopViewportRect({ x: x, y: y, width: w, height: h }),
                 elements: elementDataArray
               });
             } catch(err) {}
@@ -936,28 +1180,48 @@ public enum ElementInspectorBridge {
           }
         }
 
+        function attachCropListeners() {
+          if (!ctx || !ctx.doc || cropListenersCtx) return;
+          var d = ctx.doc;
+          d.addEventListener('mousedown', onCropMouseDown, true);
+          d.addEventListener('mousemove', onCropMouseMove, true);
+          d.addEventListener('mouseup', onCropMouseUp, true);
+          try { if (d.body) d.body.style.cursor = 'crosshair'; } catch (err) {}
+          cropListenersCtx = { doc: d, win: ctx.win };
+        }
+
+        function detachCropListeners() {
+          if (!cropListenersCtx) return;
+          var d = cropListenersCtx.doc;
+          try {
+            d.removeEventListener('mousedown', onCropMouseDown, true);
+            d.removeEventListener('mousemove', onCropMouseMove, true);
+            d.removeEventListener('mouseup', onCropMouseUp, true);
+            if (d.body) d.body.style.cursor = '';
+          } catch (err) {}
+          cropListenersCtx = null;
+        }
+
         function activateCrop() {
           if (cropModeActive) return;
           cropModeActive = true;
+          ctx = resolveInspectionContext();
+          ensureFrameObservers();
+          watchForContentFrameIfMissing();
           createCropOverlay();
-          document.addEventListener('mousedown', onCropMouseDown, true);
-          document.addEventListener('mousemove', onCropMouseMove, true);
-          document.addEventListener('mouseup', onCropMouseUp, true);
-          document.body.style.cursor = 'crosshair';
+          attachCropListeners();
         }
 
         function deactivateCrop() {
           if (!cropModeActive) return;
           cropModeActive = false;
           isCropDragging = false;
-          document.removeEventListener('mousedown', onCropMouseDown, true);
-          document.removeEventListener('mousemove', onCropMouseMove, true);
-          document.removeEventListener('mouseup', onCropMouseUp, true);
+          detachCropListeners();
           removeCropScrollListeners();
-          document.body.style.cursor = '';
           if (cropOverlay) {
             cropOverlay.style.display = 'none';
           }
+          removeFrameObserversIfIdle();
         }
 
         function clearCropSelection() {
@@ -1029,8 +1293,9 @@ public enum ElementInspectorBridge {
   private static let fullParentContextCapture = """
           var parentEl = el.parentElement;
           var parentData = null;
-          if (parentEl && parentEl !== document.body && parentEl !== document.documentElement) {
-            var ps = window.getComputedStyle(parentEl);
+          var ownerDoc = el.ownerDocument || document;
+          if (parentEl && parentEl !== ownerDoc.body && parentEl !== ownerDoc.documentElement) {
+            var ps = getComputedStyleFor(parentEl);
             var parentKeys = [
               'display','flexDirection','flexWrap','justifyContent',
               'alignItems','alignContent','gap','gridTemplateColumns',
