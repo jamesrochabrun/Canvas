@@ -148,6 +148,22 @@ inspectState.activate(mode: .crop)
 
 When no leaf elements pass the overlap threshold (e.g., cropping empty spacing), Canvas falls back to the tightest ancestor containing the crop rect.
 
+## Content-Frame (iframe) Inspection
+
+Some pages are only a shell around a same-origin `<iframe>` that hosts the real content. Canvas detects such frames automatically and targets inspection (hover highlight, click capture, crop, `scrollToAndSelect`, design edits) at the iframe's document instead of the shell.
+
+Detection is selector-based, checked at activation time:
+
+- `iframe.kyber-dev-ui__iframe`
+- `iframe[data-canvas-content-frame]` - generic opt-in: tag your content frame with this attribute
+
+Behavior details:
+
+- **Same-origin requirement.** The frame's `contentDocument` must be accessible. Cross-origin or detached frames fall back to inspecting the top document, exactly as if no frame were present.
+- **Coordinates stay in top-frame viewport space.** All rects delivered to Swift (`boundingRect`, `selectionRect`, `cropRect`, `cropRectUpdate`) are translated by the frame's position, so `ElementSnapshotCapture` and native overlay placement work unchanged.
+- **Frame reloads are handled.** A `load` listener on the frame re-attaches listeners and overlays after in-frame navigations without toggling the inspector; a `ResizeObserver` keeps rects in sync when the shell resizes the frame.
+- **No API change.** Pages without a matching frame behave identically to previous releases.
+
 ## Inspector Payload Levels
 
 `ElementInspectorDataLevel` controls how much DOM and CSS context Canvas captures.
