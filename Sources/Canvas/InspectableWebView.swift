@@ -50,6 +50,8 @@ public struct InspectableWebView: NSViewRepresentable {
   /// Called once when the underlying `WKWebView` is created.
   /// Store a weak reference to use with `ElementSnapshotCapture`.
   public var onWebViewReady: ((WKWebView) -> Void)?
+  /// Called when the page declares tweakable props via `dc_set_props`.
+  public var onTweakPropsChange: (([TweakProp]) -> Void)?
 
   public init(
     url: URL,
@@ -69,7 +71,8 @@ public struct InspectableWebView: NSViewRepresentable {
     inspectMode: InspectMode = .input,
     selectedElementId: UUID? = nil,
     selectorToRestore: String? = nil,
-    onWebViewReady: ((WKWebView) -> Void)? = nil
+    onWebViewReady: ((WKWebView) -> Void)? = nil,
+    onTweakPropsChange: (([TweakProp]) -> Void)? = nil
   ) {
     self.url = url
     self.isFileURL = isFileURL
@@ -89,6 +92,7 @@ public struct InspectableWebView: NSViewRepresentable {
     self.selectedElementId = selectedElementId
     self.selectorToRestore = selectorToRestore
     self.onWebViewReady = onWebViewReady
+    self.onTweakPropsChange = onTweakPropsChange
   }
 
   public func makeNSView(context: Context) -> WKWebView {
@@ -102,6 +106,13 @@ public struct InspectableWebView: NSViewRepresentable {
       ElementInspectorBridge.makeUserScript(for: inspectorDataLevel)
     )
     ElementInspectorBridge.registerMessageHandler(
+      on: configuration.userContentController,
+      delegate: context.coordinator
+    )
+
+    // Tweakable props — dc_set_props runtime and schema capture
+    configuration.userContentController.addUserScript(TweaksBridge.makeUserScript())
+    TweaksBridge.registerMessageHandler(
       on: configuration.userContentController,
       delegate: context.coordinator
     )
@@ -254,10 +265,17 @@ public struct InspectableWebView: NSViewRepresentable {
       _: WKUserContentController,
       didReceive message: WKScriptMessage
     ) {
-      guard
-        message.name == ElementInspectorBridge.messageName,
-        let body = message.body as? [String: Any]
-      else { return }
+      guard let body = message.body as? [String: Any] else { return }
+
+      if message.name == TweaksBridge.messageName {
+        let props = TweaksBridge.parseSchema(body)
+        Task { @MainActor in
+          parent.onTweakPropsChange?(props)
+        }
+        return
+      }
+
+      guard message.name == ElementInspectorBridge.messageName else { return }
 
       if let messageType = body["type"] as? String {
         switch messageType {
