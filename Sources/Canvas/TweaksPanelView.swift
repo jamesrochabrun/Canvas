@@ -18,6 +18,8 @@ public struct TweaksPanelView: View {
   private let onSubmitDescription: (String) -> Void
   private let onIdeas: () -> Void
   private let onValueChange: (TweakProp, TweakPropValue) -> Void
+  private let generationStatus: TweaksGenerationStatus
+  private let onCancelGeneration: (() -> Void)?
 
   @State private var descriptionText = ""
 
@@ -25,17 +27,24 @@ public struct TweaksPanelView: View {
     state: TweaksState,
     onSubmitDescription: @escaping (String) -> Void,
     onIdeas: @escaping () -> Void,
-    onValueChange: @escaping (TweakProp, TweakPropValue) -> Void
+    onValueChange: @escaping (TweakProp, TweakPropValue) -> Void,
+    generationStatus: TweaksGenerationStatus = .idle,
+    onCancelGeneration: (() -> Void)? = nil
   ) {
     self.state = state
     self.onSubmitDescription = onSubmitDescription
     self.onIdeas = onIdeas
     self.onValueChange = onValueChange
+    self.generationStatus = generationStatus
+    self.onCancelGeneration = onCancelGeneration
   }
 
   public var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       describeField
+      if generationStatus != .idle {
+        generationStatusRow
+      }
       if state.hasProps {
         Divider()
         VStack(alignment: .leading, spacing: 12) {
@@ -67,6 +76,7 @@ public struct TweaksPanelView: View {
       }
       .buttonStyle(.plain)
       .foregroundStyle(.secondary)
+      .disabled(generationStatus.isActive)
       .help("Ask the agent to invent expressive tweak controls for this design")
     }
     .padding(.horizontal, 12)
@@ -78,10 +88,74 @@ public struct TweaksPanelView: View {
   }
 
   private func submitDescription() {
+    guard !generationStatus.isActive else { return }
     let trimmed = descriptionText.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return }
     onSubmitDescription(trimmed)
     descriptionText = ""
+  }
+
+  // MARK: - Generation status
+
+  private var generationStatusRow: some View {
+    HStack(spacing: 8) {
+      generationStatusIcon
+      Text(generationStatusText)
+        .font(.callout)
+        .foregroundStyle(.secondary)
+        .lineLimit(2)
+      Spacer(minLength: 8)
+      if generationStatus.isActive, let onCancelGeneration {
+        Button("Cancel", action: onCancelGeneration)
+          .buttonStyle(.plain)
+          .font(.callout)
+          .foregroundStyle(.secondary)
+          .help("Cancel tweaks generation")
+      }
+    }
+    .padding(.horizontal, 12)
+    .padding(.vertical, 8)
+    .background(
+      RoundedRectangle(cornerRadius: 10)
+        .fill(.quaternary.opacity(0.5))
+    )
+    .accessibilityElement(children: .combine)
+  }
+
+  @ViewBuilder
+  private var generationStatusIcon: some View {
+    switch generationStatus {
+    case .idle:
+      EmptyView()
+    case .queued, .running, .waitingToApply:
+      ProgressView()
+        .controlSize(.small)
+    case .applied:
+      Image(systemName: "checkmark.circle.fill")
+        .foregroundStyle(.green)
+    case .failed, .conflict:
+      Image(systemName: "exclamationmark.triangle.fill")
+        .foregroundStyle(.orange)
+    }
+  }
+
+  private var generationStatusText: String {
+    switch generationStatus {
+    case .idle:
+      return ""
+    case .queued:
+      return "Waiting to start…"
+    case .running(let activity):
+      return activity ?? "Generating tweaks…"
+    case .waitingToApply:
+      return "Ready — waiting for the chat agent to finish…"
+    case .applied:
+      return "Tweaks applied"
+    case .failed(let message):
+      return message
+    case .conflict:
+      return "The file changed while generating"
+    }
   }
 
   // MARK: - Empty state
