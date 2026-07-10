@@ -66,6 +66,17 @@ public enum TweaksBridge {
     webView.evaluateJavaScript(script) { _, _ in }
   }
 
+  /// Reports whether the current document called `dc_set_props` during load.
+  @MainActor
+  public static func hasDeclaredProps(in webView: WKWebView) async -> Bool {
+    await withCheckedContinuation { continuation in
+      let script = "Boolean(window.__canvasTweaks && window.__canvasTweaks.hasDeclaredProps())"
+      webView.evaluateJavaScript(script) { result, _ in
+        continuation.resume(returning: result as? Bool ?? false)
+      }
+    }
+  }
+
   static func setPropJavaScript(name: String, value: TweakPropValue) -> String? {
     let payload: [String: Any] = ["name": name, "value": value.bridgeJSONValue]
     guard JSONSerialization.isValidJSONObject(payload),
@@ -117,9 +128,11 @@ public enum TweaksBridge {
   static let tweaksJS = """
     (function() {
       if (window.__canvasTweaks) { return; }
+      var hasDeclaredProps = false;
       window.props = window.props || {};
       window.dc_set_props = function(schema) {
         if (!schema || typeof schema !== 'object') { return; }
+        hasDeclaredProps = true;
         var order = Object.keys(schema);
         var props = {};
         order.forEach(function(name) {
@@ -136,6 +149,9 @@ public enum TweaksBridge {
         } catch (err) {}
       };
       window.__canvasTweaks = {
+        hasDeclaredProps: function() {
+          return hasDeclaredProps;
+        },
         setProp: function(payload) {
           if (!payload || typeof payload.name !== 'string') { return; }
           window.props[payload.name] = payload.value;

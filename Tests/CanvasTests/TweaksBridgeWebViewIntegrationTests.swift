@@ -60,6 +60,8 @@ struct TweaksBridgeWebViewIntegrationTests {
     let props = await handler.waitForProps()
     #expect(props.map(\.name) == ["warmth", "night"])
     #expect(props.first?.value == .number(60))
+    let hasDeclaredProps = await TweaksBridge.hasDeclaredProps(in: webView)
+    #expect(hasDeclaredProps)
 
     // Native → page: setProp updates window.props and re-invokes the render callback.
     TweaksBridge.setProp(name: "warmth", value: .number(85), in: webView)
@@ -76,5 +78,26 @@ struct TweaksBridgeWebViewIntegrationTests {
 
     let renderCount = try await webView.evaluateJavaScript("window.__renderCount") as? NSNumber
     #expect((renderCount?.intValue ?? 0) >= 2)
+  }
+
+  @Test(.timeLimit(.minutes(1)))
+  func documentWithoutSchemaReportsNoDeclaredProps() async throws {
+    let configuration = WKWebViewConfiguration()
+    configuration.userContentController.addUserScript(TweaksBridge.makeUserScript())
+    let webView = WKWebView(
+      frame: .init(x: 0, y: 0, width: 100, height: 100),
+      configuration: configuration
+    )
+    webView.loadHTMLString("<html><body>No tweaks</body></html>", baseURL: nil)
+
+    for _ in 0..<50 {
+      if (try? await webView.evaluateJavaScript("document.readyState")) as? String == "complete" {
+        break
+      }
+      try await Task.sleep(for: .milliseconds(50))
+    }
+
+    let hasDeclaredProps = await TweaksBridge.hasDeclaredProps(in: webView)
+    #expect(!hasDeclaredProps)
   }
 }

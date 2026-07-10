@@ -97,6 +97,8 @@ struct TweaksBridgeParsingTests {
   @Test func tweaksScriptDefinesRuntimeContract() {
     let js = TweaksBridge.tweaksJS
     #expect(js.contains("window.dc_set_props = function"))
+    #expect(js.contains("hasDeclaredProps = true"))
+    #expect(js.contains("hasDeclaredProps: function()"))
     #expect(js.contains("window.webkit.messageHandlers.canvasTweaks.postMessage"))
     #expect(js.contains("order: order"))
     #expect(js.contains("window.dc_on_props_changed"))
