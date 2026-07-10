@@ -208,6 +208,7 @@ public struct InspectableWebView: NSViewRepresentable {
     var lastInspectModeState: Bool = false
     var lastInspectMode: InspectMode = .input
     var lastSelectedElementId: UUID?
+    var navigationGeneration = 0
     /// Held weakly to avoid retaining the view after dealloc
     weak var webView: WKWebView?
 
@@ -219,12 +220,14 @@ public struct InspectableWebView: NSViewRepresentable {
     }
 
     public func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+      navigationGeneration += 1
       Task { @MainActor in
         parent.onLoadingChange?(true)
       }
     }
 
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+      let completedGeneration = navigationGeneration
       Task { @MainActor in
         parent.onLoadingChange?(false)
         parent.onURLChange?(webView.url)
@@ -232,6 +235,7 @@ public struct InspectableWebView: NSViewRepresentable {
       }
       Task { @MainActor [weak self] in
         let hasDeclaredProps = await TweaksBridge.hasDeclaredProps(in: webView)
+        guard self?.navigationGeneration == completedGeneration else { return }
         self?.parent.onTweakSchemaAvailabilityChange?(hasDeclaredProps)
       }
       // Re-activate inspector after HMR/page reload if still active
