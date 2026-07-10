@@ -35,6 +35,9 @@ public enum TweaksPromptBuilder {
   /// Shared contract block appended to every tweaks prompt so the agent
   /// produces declarations the native panel and persister can consume.
   static let contractReference = """
+    Work directly and only edit the named design file. Do not start a dev server, inspect unrelated files, \
+    or explain the change; finish as soon as the file contains a valid implementation.
+
     Tweakable props contract:
     - Call dc_set_props exactly once, at the top level of an inline <script>, with a single \
     plain JSON object literal as its only argument (double-quoted keys and strings, literal \

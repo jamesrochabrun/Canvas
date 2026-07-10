@@ -35,4 +35,11 @@ struct TweaksPromptBuilderTests {
       #expect(prompt.contains("\"slider\" | \"select\" | \"color\" | \"toggle\" | \"text\""))
     }
   }
+
+  @Test func promptsScopeTheAgentToTheDesignFile() {
+    let prompt = TweaksPromptBuilder.ideasPrompt(fileName: "index.html")
+
+    #expect(prompt.contains("only edit the named design file"))
+    #expect(prompt.contains("Do not start a dev server"))
+  }
 }

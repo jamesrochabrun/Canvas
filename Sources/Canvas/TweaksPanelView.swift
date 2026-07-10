@@ -18,16 +18,19 @@ public struct TweaksPanelView: View {
   private let onSubmitDescription: (String) -> Void
   private let onIdeas: () -> Void
   private let onValueChange: (TweakProp, TweakPropValue) -> Void
+  private let agentState: TweaksAgentState
 
   @State private var descriptionText = ""
 
   public init(
     state: TweaksState,
+    agentState: TweaksAgentState = .idle,
     onSubmitDescription: @escaping (String) -> Void,
     onIdeas: @escaping () -> Void,
     onValueChange: @escaping (TweakProp, TweakPropValue) -> Void
   ) {
     self.state = state
+    self.agentState = agentState
     self.onSubmitDescription = onSubmitDescription
     self.onIdeas = onIdeas
     self.onValueChange = onValueChange
@@ -36,6 +39,7 @@ public struct TweaksPanelView: View {
   public var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       describeField
+      agentStatus
       if state.hasProps {
         Divider()
         VStack(alignment: .leading, spacing: 12) {
@@ -57,6 +61,7 @@ public struct TweaksPanelView: View {
       TextField("Describe a tweak…", text: $descriptionText)
         .textFieldStyle(.plain)
         .onSubmit(submitDescription)
+        .disabled(agentState == .working)
 
       Button(action: onIdeas) {
         HStack(spacing: 4) {
@@ -67,6 +72,7 @@ public struct TweaksPanelView: View {
       }
       .buttonStyle(.plain)
       .foregroundStyle(.secondary)
+      .disabled(agentState == .working)
       .help("Ask the agent to invent expressive tweak controls for this design")
     }
     .padding(.horizontal, 12)
@@ -82,6 +88,36 @@ public struct TweaksPanelView: View {
     guard !trimmed.isEmpty else { return }
     onSubmitDescription(trimmed)
     descriptionText = ""
+  }
+
+  @ViewBuilder
+  private var agentStatus: some View {
+    switch agentState {
+    case .idle:
+      EmptyView()
+    case .working:
+      Label {
+        Text("Adding tweaks…")
+      } icon: {
+        ProgressView()
+          .controlSize(.small)
+      }
+      .font(.caption)
+      .foregroundStyle(.secondary)
+    case .failed(let message):
+      Label(message, systemImage: "exclamationmark.circle")
+        .font(.caption)
+        .foregroundStyle(.red)
+        .fixedSize(horizontal: false, vertical: true)
+    case .conflict:
+      Label(
+        "The file changed while tweaks were being added. Submit again to use the latest version.",
+        systemImage: "arrow.trianglehead.2.clockwise.rotate.90"
+      )
+      .font(.caption)
+      .foregroundStyle(.orange)
+      .fixedSize(horizontal: false, vertical: true)
+    }
   }
 
   // MARK: - Empty state
