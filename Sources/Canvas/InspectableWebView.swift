@@ -52,6 +52,8 @@ public struct InspectableWebView: NSViewRepresentable {
   public var onWebViewReady: ((WKWebView) -> Void)?
   /// Called when the page declares tweakable props via `dc_set_props`.
   public var onTweakPropsChange: (([TweakProp]) -> Void)?
+  /// Called after a successful load with whether the document declared props.
+  public var onTweakSchemaAvailabilityChange: ((Bool) -> Void)?
 
   public init(
     url: URL,
@@ -72,7 +74,8 @@ public struct InspectableWebView: NSViewRepresentable {
     selectedElementId: UUID? = nil,
     selectorToRestore: String? = nil,
     onWebViewReady: ((WKWebView) -> Void)? = nil,
-    onTweakPropsChange: (([TweakProp]) -> Void)? = nil
+    onTweakPropsChange: (([TweakProp]) -> Void)? = nil,
+    onTweakSchemaAvailabilityChange: ((Bool) -> Void)? = nil
   ) {
     self.url = url
     self.isFileURL = isFileURL
@@ -93,6 +96,7 @@ public struct InspectableWebView: NSViewRepresentable {
     self.selectorToRestore = selectorToRestore
     self.onWebViewReady = onWebViewReady
     self.onTweakPropsChange = onTweakPropsChange
+    self.onTweakSchemaAvailabilityChange = onTweakSchemaAvailabilityChange
   }
 
   public func makeNSView(context: Context) -> WKWebView {
@@ -225,6 +229,10 @@ public struct InspectableWebView: NSViewRepresentable {
         parent.onLoadingChange?(false)
         parent.onURLChange?(webView.url)
         lastLoadedURL = parent.url
+      }
+      Task { @MainActor [weak self] in
+        let hasDeclaredProps = await TweaksBridge.hasDeclaredProps(in: webView)
+        self?.parent.onTweakSchemaAvailabilityChange?(hasDeclaredProps)
       }
       // Re-activate inspector after HMR/page reload if still active
       if parent.isInspectModeActive?.wrappedValue == true {
