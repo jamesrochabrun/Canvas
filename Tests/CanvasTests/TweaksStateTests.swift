@@ -30,6 +30,47 @@ struct TweaksStateTests {
     #expect(state.props.map(\.value) == [.number(85), .boolean(false)])
   }
 
+  @Test func dirtyStateTracksValuesThatDifferFromDefaults() {
+    let state = TweaksState()
+    state.updateSchema(makeProps())
+    #expect(!state.hasUnsavedChanges)
+
+    state.updateValue(name: "warmth", .number(85))
+    #expect(state.hasUnsavedChanges)
+
+    state.updateValue(name: "warmth", .number(60))
+    #expect(!state.hasUnsavedChanges)
+  }
+
+  @Test func resetRestoresDefaultsAndReturnsChangedProps() {
+    let state = TweaksState()
+    state.updateSchema(makeProps())
+    state.updateValue(name: "warmth", .number(85))
+    state.updateValue(name: "night", .boolean(true))
+
+    let resetProps = state.resetToDefaults()
+
+    #expect(resetProps.map(\.name) == ["warmth", "night"])
+    #expect(resetProps.map(\.value) == [.number(60), .boolean(false)])
+    #expect(!state.hasUnsavedChanges)
+  }
+
+  @Test func commitPromotesCurrentValuesToDefaults() {
+    let state = TweaksState()
+    state.updateSchema(makeProps())
+    state.updateValue(name: "warmth", .number(85))
+
+    state.commitCurrentValuesAsDefaults()
+
+    #expect(state.props[0].value == .number(85))
+    #expect(state.props[0].defaultValue == .number(85))
+    #expect(!state.hasUnsavedChanges)
+
+    state.updateValue(name: "warmth", .number(20))
+    let resetProps = state.resetToDefaults()
+    #expect(resetProps.first?.value == .number(85))
+  }
+
   @Test func clearRemovesAllProps() {
     let state = TweaksState()
     state.updateSchema(makeProps())

@@ -19,6 +19,10 @@ public final class TweaksState {
   public private(set) var props: [TweakProp] = []
 
   public var hasProps: Bool { !props.isEmpty }
+  /// Whether any live value differs from its latest saved default.
+  public var hasUnsavedChanges: Bool {
+    props.contains { $0.value != $0.defaultValue }
+  }
 
   public init() {}
 
@@ -31,6 +35,37 @@ public final class TweaksState {
   public func updateValue(name: String, _ value: TweakPropValue) {
     guard let index = props.firstIndex(where: { $0.name == name }) else { return }
     props[index].value = value
+  }
+
+  /// Restores all changed props to their latest saved defaults.
+  ///
+  /// Returns the changed props so the host can apply their restored values
+  /// to the live preview without reloading it.
+  @discardableResult
+  public func resetToDefaults() -> [TweakProp] {
+    var resetProps: [TweakProp] = []
+    for index in props.indices where props[index].value != props[index].defaultValue {
+      props[index].value = props[index].defaultValue
+      resetProps.append(props[index])
+    }
+    return resetProps
+  }
+
+  /// Promotes every current live value to the saved-default baseline.
+  public func commitCurrentValuesAsDefaults() {
+    props = props.map { prop in
+      TweakProp(
+        name: prop.name,
+        label: prop.label,
+        type: prop.type,
+        minimum: prop.minimum,
+        maximum: prop.maximum,
+        step: prop.step,
+        options: prop.options,
+        value: prop.value,
+        defaultValue: prop.value
+      )
+    }
   }
 
   /// Clears the schema; call when the web view starts a new navigation.

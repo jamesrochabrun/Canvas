@@ -11,12 +11,18 @@ import Foundation
 /// Builds agent prompts for the tweaks panel's "Ideas" and custom-description actions.
 public enum TweaksPromptBuilder {
 
-  /// Prompt asking the agent to study the design and invent expressive controls.
-  public static func ideasPrompt(fileName: String) -> String {
+  /// Prompt asking the agent to study the design and invent additional expressive controls.
+  public static func ideasPrompt(
+    fileName: String,
+    existingProps: [TweakProp] = []
+  ) -> String {
     """
-    Add tweakable controls to \(fileName) (declare with dc_set_props, read via this.props): \
-    study this design and add a tweaks panel with two or three expressive controls that \
-    reshape the feel, not single-property pixel-pushing
+    Add additional tweakable controls to \(fileName) (declare with dc_set_props, read via this.props): \
+    first read the entire file and understand the existing tweak schema and render behavior, then \
+    add two or three new expressive controls that reshape the feel, not single-property pixel-pushing. \
+    The new controls must be meaningfully different from every existing control.
+
+    \(existingPropsReference(existingProps))
 
     \(contractReference)
     """
@@ -37,6 +43,18 @@ public enum TweaksPromptBuilder {
   static let contractReference = """
     Work directly and only edit the named design file. Do not start a dev server, inspect unrelated files, \
     or explain the change; finish as soon as the file contains a valid implementation.
+
+    Cumulative editing requirements:
+    - Read the complete file before editing. Inventory the existing dc_set_props entries and trace how \
+    each one affects the render function, DOM, and CSS before proposing anything new.
+    - If dc_set_props already exists, extend its existing object literal in place. Preserve every existing \
+    prop's name, label, type, range/options, current default value, order, and behavior exactly. Do not \
+    replace the declaration, create a second call, rename or delete props, or reset their values unless \
+    the user's instruction explicitly asks to change a specific existing control.
+    - Avoid duplicates by comparing both names/labels and behavior. A differently named control is still \
+    a duplicate if it manipulates the same visual or behavioral dimension as an existing control.
+    - Extend the existing render function so it continues applying every old prop and also applies each \
+    new prop. Only create a fresh declaration and render function when the file has none.
 
     Tweakable props contract:
     - Call dc_set_props exactly once, at the top level of an inline <script>, with a single \
@@ -64,4 +82,18 @@ public enum TweaksPromptBuilder {
       render();
     </script>
     """
+
+  private static func existingPropsReference(_ props: [TweakProp]) -> String {
+    guard !props.isEmpty else {
+      return "The live page currently reports no existing tweak controls; still verify the file before creating them."
+    }
+
+    let inventory = props.map { prop in
+      "- \(prop.name): \(prop.label) [\(prop.type.rawValue)]"
+    }.joined(separator: "\n")
+    return """
+      Existing controls currently reported by the live page (all must be preserved):
+      \(inventory)
+      """
+  }
 }

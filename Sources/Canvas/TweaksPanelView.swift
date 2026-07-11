@@ -18,22 +18,31 @@ public struct TweaksPanelView: View {
   private let onSubmitDescription: (String) -> Void
   private let onIdeas: () -> Void
   private let onValueChange: (TweakProp, TweakPropValue) -> Void
+  private let onReset: () -> Void
+  private let onSaveDefaults: () -> Void
   private let agentState: TweaksAgentState
+  private let defaultsSaveState: TweaksDefaultsSaveState
 
   @State private var descriptionText = ""
 
   public init(
     state: TweaksState,
     agentState: TweaksAgentState = .idle,
+    defaultsSaveState: TweaksDefaultsSaveState = .idle,
     onSubmitDescription: @escaping (String) -> Void,
     onIdeas: @escaping () -> Void,
-    onValueChange: @escaping (TweakProp, TweakPropValue) -> Void
+    onValueChange: @escaping (TweakProp, TweakPropValue) -> Void,
+    onReset: @escaping () -> Void,
+    onSaveDefaults: @escaping () -> Void
   ) {
     self.state = state
     self.agentState = agentState
+    self.defaultsSaveState = defaultsSaveState
     self.onSubmitDescription = onSubmitDescription
     self.onIdeas = onIdeas
     self.onValueChange = onValueChange
+    self.onReset = onReset
+    self.onSaveDefaults = onSaveDefaults
   }
 
   public var body: some View {
@@ -42,11 +51,22 @@ public struct TweaksPanelView: View {
       agentStatus
       if state.hasProps {
         Divider()
-        VStack(alignment: .leading, spacing: 12) {
-          ForEach(state.props) { prop in
-            controlRow(for: prop)
+        ScrollView {
+          VStack(alignment: .leading, spacing: 12) {
+            ForEach(state.props) { prop in
+              controlRow(for: prop)
+            }
           }
         }
+        .scrollBounceBehavior(.basedOnSize)
+        .disabled(agentState == .working || defaultsSaveState.isSaving)
+        Divider()
+        TweaksPanelFooter(
+          agentState: agentState,
+          saveState: defaultsSaveState,
+          onReset: onReset,
+          onSaveDefaults: onSaveDefaults
+        )
       } else {
         emptyState
       }
@@ -61,7 +81,7 @@ public struct TweaksPanelView: View {
       TextField("Describe a tweak…", text: $descriptionText)
         .textFieldStyle(.plain)
         .onSubmit(submitDescription)
-        .disabled(agentState == .working)
+        .disabled(agentState == .working || defaultsSaveState.isSaving)
 
       Button(action: onIdeas) {
         HStack(spacing: 4) {
@@ -72,7 +92,7 @@ public struct TweaksPanelView: View {
       }
       .buttonStyle(.plain)
       .foregroundStyle(.secondary)
-      .disabled(agentState == .working)
+      .disabled(agentState == .working || defaultsSaveState.isSaving)
       .help("Ask the agent to invent expressive tweak controls for this design")
     }
     .padding(.horizontal, 12)
@@ -170,7 +190,14 @@ public struct TweaksPanelView: View {
     let range = sliderRange(for: prop)
     let binding = Binding(
       get: { prop.value.doubleValue ?? range.lowerBound },
-      set: { onValueChange(prop, .number($0)) }
+      set: { newValue in
+        let quantizedValue = TweakSliderValueQuantizer.quantize(
+          newValue,
+          in: range,
+          step: prop.step
+        )
+        onValueChange(prop, .number(quantizedValue))
+      }
     )
     return VStack(alignment: .leading, spacing: 4) {
       HStack {
@@ -181,15 +208,9 @@ public struct TweaksPanelView: View {
           .font(.callout.monospacedDigit())
           .foregroundStyle(.secondary)
       }
-      Group {
-        if let step = prop.step, step > 0 {
-          Slider(value: binding, in: range, step: step)
-        } else {
-          Slider(value: binding, in: range)
-        }
-      }
-      .controlSize(.small)
-      .accessibilityLabel(prop.label)
+      Slider(value: binding, in: range)
+        .controlSize(.regular)
+        .accessibilityLabel(prop.label)
     }
   }
 
