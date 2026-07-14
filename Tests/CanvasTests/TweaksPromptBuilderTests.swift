@@ -60,6 +60,21 @@ struct TweaksPromptBuilderTests {
     }
   }
 
+  @Test func deleteAllPromptTargetsFileAndOmitsCreationContract() {
+    let prompt = TweaksPromptBuilder.deleteAllPrompt(fileName: "Bluey Landing.dc.html")
+
+    #expect(prompt.hasPrefix("Remove the complete tweaks integration from Bluey Landing.dc.html"))
+    #expect(prompt.contains("var(--tweak-<name>, <fallback>)"))
+    #expect(prompt.contains("data-tweak"))
+    #expect(prompt.contains("dc:propschange"))
+    #expect(prompt.contains("only edit the named design file"))
+    // Deletion must not carry the creation contract, which instructs the
+    // agent to declare props.
+    #expect(!prompt.contains("Tweakable props contract:"))
+    #expect(!prompt.contains("Call dc_set_props exactly once"))
+    #expect(!prompt.contains("Cumulative editing requirements:"))
+  }
+
   @Test func promptsScopeTheAgentToTheDesignFile() {
     let prompt = TweaksPromptBuilder.ideasPrompt(fileName: "index.html")
 

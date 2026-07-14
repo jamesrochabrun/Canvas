@@ -32,5 +32,6 @@ struct TweakSliderValueQuantizerTests {
   func invalidStepsKeepContinuousValue() {
     #expect(TweakSliderValueQuantizer.quantize(42.5, in: 0...100, step: nil) == 42.5)
     #expect(TweakSliderValueQuantizer.quantize(42.5, in: 0...100, step: 0) == 42.5)
+    #expect(TweakSliderValueQuantizer.quantize(42.5, in: 0...100, step: .infinity) == 42.5)
   }
 }
