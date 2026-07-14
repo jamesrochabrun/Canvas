@@ -25,12 +25,16 @@ public enum TweaksBridge {
   ///
   /// Injected at document start so the function exists before page scripts
   /// execute; it persists across reloads, so the page re-declares its schema
-  /// on every load (which is the schema refresh mechanism).
+  /// on every load (which is the schema refresh mechanism). Injected into
+  /// every frame (not just the main frame) so pages hosted inside a
+  /// same-origin content iframe — e.g. a dev-shell preview — can declare
+  /// their schema too; `postMessage` reaches the registered handler from
+  /// any frame.
   public static func makeUserScript() -> WKUserScript {
     WKUserScript(
       source: tweaksJS,
       injectionTime: .atDocumentStart,
-      forMainFrameOnly: true
+      forMainFrameOnly: false
     )
   }
 
@@ -67,15 +71,35 @@ public enum TweaksBridge {
   }
 
   /// Reports whether the current document called `dc_set_props` during load.
+  ///
+  /// Checks the top window first, then every same-origin content iframe, so
+  /// schemas declared by a framed page are detected too.
   @MainActor
   public static func hasDeclaredProps(in webView: WKWebView) async -> Bool {
     await withCheckedContinuation { continuation in
-      let script = "Boolean(window.__canvasTweaks && window.__canvasTweaks.hasDeclaredProps())"
-      webView.evaluateJavaScript(script) { result, _ in
+      webView.evaluateJavaScript(hasDeclaredPropsJavaScript) { result, _ in
         continuation.resume(returning: result as? Bool ?? false)
       }
     }
   }
+
+  /// Expression evaluated in the main frame to detect a declared schema in
+  /// the top window or any same-origin content iframe. Cross-origin frames
+  /// throw on `contentWindow` access and safely count as undeclared.
+  static let hasDeclaredPropsJavaScript = """
+    (function() { \
+    var declared = function(win) { \
+    try { return Boolean(win && win.__canvasTweaks && win.__canvasTweaks.hasDeclaredProps()); } \
+    catch (err) { return false; } \
+    }; \
+    if (declared(window)) { return true; } \
+    var frames = document.querySelectorAll('iframe'); \
+    for (var i = 0; i < frames.length; i += 1) { \
+    if (declared(frames[i].contentWindow)) { return true; } \
+    } \
+    return false; \
+    })();
+    """
 
   static func setPropJavaScript(name: String, value: TweakPropValue) -> String? {
     let payload: [String: Any] = ["name": name, "value": value.bridgeJSONValue]
@@ -84,7 +108,22 @@ public enum TweaksBridge {
           let json = String(data: data, encoding: .utf8) else {
       return nil
     }
-    return "window.__canvasTweaks && window.__canvasTweaks.setProp(\(json));"
+    // Applies the payload to the top window and every same-origin content
+    // iframe; cross-origin frames throw on access and are skipped.
+    return """
+      (function() { \
+      var payload = \(json); \
+      var apply = function(win) { \
+      try { if (win && win.__canvasTweaks) { win.__canvasTweaks.setProp(payload); } } \
+      catch (err) {} \
+      }; \
+      apply(window); \
+      var frames = document.querySelectorAll('iframe'); \
+      for (var i = 0; i < frames.length; i += 1) { \
+      apply(frames[i].contentWindow); \
+      } \
+      })();
+      """
   }
 
   private static func parseProp(name: String, declaration: [String: Any]) -> TweakProp? {

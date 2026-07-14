@@ -75,11 +75,25 @@ struct TweaksBridgeParsingTests {
 
   @Test func setPropJavaScriptSerializesValues() throws {
     let numberScript = try #require(TweaksBridge.setPropJavaScript(name: "warmth", value: .number(80)))
-    #expect(numberScript.contains("window.__canvasTweaks && window.__canvasTweaks.setProp("))
+    #expect(numberScript.contains("win.__canvasTweaks.setProp(payload)"))
     #expect(numberScript.contains("\"value\":80"))
 
     let boolScript = try #require(TweaksBridge.setPropJavaScript(name: "night", value: .boolean(true)))
     #expect(boolScript.contains("\"value\":true"))
+  }
+
+  @Test func setPropJavaScriptFansOutToContentFrames() throws {
+    let script = try #require(TweaksBridge.setPropJavaScript(name: "warmth", value: .number(80)))
+    #expect(script.contains("apply(window)"))
+    #expect(script.contains("document.querySelectorAll('iframe')"))
+    #expect(script.contains("apply(frames[i].contentWindow)"))
+    // Cross-origin frames throw on access and must be skipped, not fail the whole push.
+    #expect(script.contains("catch (err)"))
+
+    let detection = TweaksBridge.hasDeclaredPropsJavaScript
+    #expect(detection.contains("declared(window)"))
+    #expect(detection.contains("document.querySelectorAll('iframe')"))
+    #expect(detection.contains("declared(frames[i].contentWindow)"))
   }
 
   @Test func setPropJavaScriptEscapesScriptBreakingStrings() throws {
