@@ -3,7 +3,8 @@
 //  WebInspector
 //
 //  Constructs the prompts sent to the agent asking it to add tweakable
-//  controls (dc_set_props declarations) to the previewed design file.
+//  controls (dc_set_props declarations) to the previewed design file, or to
+//  remove the tweaks integration entirely.
 //
 
 import Foundation
@@ -35,6 +36,34 @@ public enum TweaksPromptBuilder {
     \(instruction)
 
     \(contractReference)
+    """
+  }
+
+  /// Prompt asking the agent to remove the complete tweaks integration from a file.
+  ///
+  /// Unlike the creation prompts, this deliberately omits the shared contract
+  /// block — the agent is tearing the integration out, not producing
+  /// declarations for the panel to consume.
+  public static func deleteAllPrompt(fileName: String) -> String {
+    """
+    Remove the complete tweaks integration from \(fileName). The design must keep looking and \
+    behaving exactly as it does right now with the current default values — only the tweak \
+    machinery goes away.
+
+    Work directly and only edit the named design file. Do not start a dev server, inspect \
+    unrelated files, or explain the change; finish as soon as the file contains a valid \
+    implementation.
+
+    Removal requirements:
+    - Read the complete file first and trace how each declared prop reaches the render function, \
+    DOM, and CSS before deleting anything.
+    - Delete the dc_set_props call and its schema declaration, and the dc_on_props_changed \
+    assignment.
+    - Replace every var(--tweak-<name>, <fallback>) reference with its fallback value, then remove \
+    the tweak-only custom properties themselves.
+    - Remove data-tweak attributes, this.props/window.props reads, dc:propschange event listeners, \
+    and any DOM elements, styles, or helper functions that exist solely to support tweaks.
+    - Preserve every unrelated piece of design and behavior exactly as it is.
     """
   }
 

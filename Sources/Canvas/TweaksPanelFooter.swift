@@ -2,7 +2,8 @@
 //  TweaksPanelFooter.swift
 //  WebInspector
 //
-//  Reset and explicit-default persistence actions for the tweaks panel.
+//  Delete-all, reset, and explicit-default persistence actions for the
+//  tweaks panel.
 //
 
 import SwiftUI
@@ -10,8 +11,11 @@ import SwiftUI
 struct TweaksPanelFooter: View {
   let agentState: TweaksAgentState
   let saveState: TweaksDefaultsSaveState
+  let onDeleteAll: () -> Void
   let onReset: () -> Void
   let onSaveDefaults: () -> Void
+
+  @State private var isConfirmingDeleteAll = false
 
   var body: some View {
     let presentation = TweaksPanelFooterPresentation.resolve(
@@ -28,6 +32,24 @@ struct TweaksPanelFooter: View {
       }
 
       HStack(spacing: 12) {
+        Button("Delete All Tweaks", systemImage: "trash", role: .destructive) {
+          isConfirmingDeleteAll = true
+        }
+        .labelStyle(.iconOnly)
+        .buttonStyle(.plain)
+        .foregroundStyle(presentation.actionsAreDisabled ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.red))
+        .disabled(presentation.actionsAreDisabled)
+        .help("Delete every tweak control and its generated app wiring")
+        .confirmationDialog(
+          "Delete all tweaks?",
+          isPresented: $isConfirmingDeleteAll
+        ) {
+          Button("Delete All Tweaks", role: .destructive, action: onDeleteAll)
+          Button("Cancel", role: .cancel) {}
+        } message: {
+          Text("This removes every tweak control and its generated app wiring.")
+        }
+
         Spacer()
 
         Button("Reset", action: onReset)

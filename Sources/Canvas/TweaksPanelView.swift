@@ -18,6 +18,7 @@ public struct TweaksPanelView: View {
   private let onSubmitDescription: (String) -> Void
   private let onIdeas: () -> Void
   private let onValueChange: (TweakProp, TweakPropValue) -> Void
+  private let onDeleteAll: () -> Void
   private let onReset: () -> Void
   private let onSaveDefaults: () -> Void
   private let agentState: TweaksAgentState
@@ -32,6 +33,7 @@ public struct TweaksPanelView: View {
     onSubmitDescription: @escaping (String) -> Void,
     onIdeas: @escaping () -> Void,
     onValueChange: @escaping (TweakProp, TweakPropValue) -> Void,
+    onDeleteAll: @escaping () -> Void,
     onReset: @escaping () -> Void,
     onSaveDefaults: @escaping () -> Void
   ) {
@@ -41,6 +43,7 @@ public struct TweaksPanelView: View {
     self.onSubmitDescription = onSubmitDescription
     self.onIdeas = onIdeas
     self.onValueChange = onValueChange
+    self.onDeleteAll = onDeleteAll
     self.onReset = onReset
     self.onSaveDefaults = onSaveDefaults
   }
@@ -64,6 +67,7 @@ public struct TweaksPanelView: View {
         TweaksPanelFooter(
           agentState: agentState,
           saveState: defaultsSaveState,
+          onDeleteAll: onDeleteAll,
           onReset: onReset,
           onSaveDefaults: onSaveDefaults
         )
@@ -117,7 +121,7 @@ public struct TweaksPanelView: View {
       EmptyView()
     case .working:
       Label {
-        Text("Adding tweaks…")
+        Text("Updating tweaks…")
       } icon: {
         ProgressView()
           .controlSize(.small)
@@ -208,9 +212,13 @@ public struct TweaksPanelView: View {
           .font(.callout.monospacedDigit())
           .foregroundStyle(.secondary)
       }
-      Slider(value: binding, in: range)
-        .controlSize(.regular)
-        .accessibilityLabel(prop.label)
+      TweakSlider(
+        value: binding,
+        in: range,
+        step: prop.step,
+        accessibilityLabel: prop.label,
+        accessibilityValue: sliderValueText(for: prop)
+      )
     }
   }
 
