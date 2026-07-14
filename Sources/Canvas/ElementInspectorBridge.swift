@@ -197,11 +197,10 @@ public enum ElementInspectorBridge {
   /// CSS selectors used to locate a same-origin `<iframe>` hosting the actual
   /// content to inspect. When such a frame is present and its document is
   /// accessible, inspection targets that document instead of the top one;
-  /// otherwise behavior is unchanged. Hosts can opt in generically by tagging
-  /// their frame with `data-canvas-content-frame`.
+  /// otherwise behavior is unchanged. Hosts opt in by tagging their frame
+  /// with `data-canvas-content-frame`.
   static let defaultContentFrameSelectors = [
-    "iframe.kyber-dev-ui__iframe",
-    "iframe[data-canvas-content-frame]",
+    "iframe[data-canvas-content-frame]"
   ]
 
   // swiftlint:disable:next function_body_length

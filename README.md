@@ -154,8 +154,7 @@ Some pages are only a shell around a same-origin `<iframe>` that hosts the real 
 
 Detection is selector-based, checked at activation time:
 
-- `iframe.kyber-dev-ui__iframe`
-- `iframe[data-canvas-content-frame]` - generic opt-in: tag your content frame with this attribute
+- `iframe[data-canvas-content-frame]` - opt-in: tag your content frame with this attribute
 
 Behavior details:
 
