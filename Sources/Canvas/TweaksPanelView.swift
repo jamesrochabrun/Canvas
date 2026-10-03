@@ -25,6 +25,7 @@ public struct TweaksPanelView: View {
   private let defaultsSaveState: TweaksDefaultsSaveState
 
   @State private var descriptionText = ""
+  @Environment(\.undoManager) private var undoManager
 
   public init(
     state: TweaksState,
@@ -76,6 +77,13 @@ public struct TweaksPanelView: View {
       }
     }
     .padding(14)
+    .onChange(of: state.props) { _, _ in
+      // Props are rewritten from outside the field editor (the agent, reset,
+      // delete-all), so any typing undo registered against these text fields
+      // now references ranges that no longer exist — popping one via Cmd+Z
+      // raises NSRangeException inside AppKit. Drop the stale stack.
+      undoManager?.removeAllActions()
+    }
   }
 
   // MARK: - Describe field
@@ -112,6 +120,10 @@ public struct TweaksPanelView: View {
     guard !trimmed.isEmpty else { return }
     onSubmitDescription(trimmed)
     descriptionText = ""
+    // Clearing the field programmatically leaves the window's undo stack
+    // holding an NSUndoTyping for the text that was just removed; undoing
+    // it against the now-empty storage crashes with NSRangeException.
+    undoManager?.removeAllActions()
   }
 
   @ViewBuilder
