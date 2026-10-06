@@ -10,15 +10,16 @@ import SwiftUI
 
 /// Overlay that positions the crop input view just below the crop rectangle,
 /// using the same layout resolver as the inspection mode input.
-struct WebInspectCropInputOverlay: View {
+struct WebInspectCropInputOverlay<InputAccessory: View>: View {
   @Bindable var state: ElementInspectState
   let onSubmit: ((CGRect, [ElementInspectorData], String) -> Void)?
   let onSubmitAndSend: ((CGRect, [ElementInspectorData], String) -> Void)?
   let deactivateOnSubmit: Bool
+  let inputAccessory: (WebInspectInputAccessoryContext) -> InputAccessory
 
   @State private var measuredHeight: CGFloat = Self.defaultHeight
 
-  private static let defaultHeight: CGFloat = 120
+  private static var defaultHeight: CGFloat { 120 }
   private let contentInset: CGFloat = 12
   private let gap: CGFloat = 12
 
@@ -69,6 +70,15 @@ struct WebInspectCropInputOverlay: View {
       },
       onDismiss: {
         state.dismissCropRect()
+      },
+      leadingAccessory: { draftText in
+        if let context = WebInspectInputAccessoryContext.forCrop(
+          state: state,
+          draftText: draftText,
+          deactivateOnSubmit: deactivateOnSubmit
+        ) {
+          inputAccessory(context)
+        }
       }
     )
     .background {

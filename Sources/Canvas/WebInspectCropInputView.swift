@@ -13,7 +13,10 @@ import SwiftUI
 ///
 /// Displays an orange "Region" badge, crop dimensions, and a text field for the user to describe
 /// the change they want. Return queues, Command-Return sends immediately, and Escape dismisses.
-public struct WebInspectCropInputView: View {
+///
+/// An optional leading accessory is rendered before the text field; the builder receives
+/// the trimmed draft text on every change.
+public struct WebInspectCropInputView<LeadingAccessory: View>: View {
 
   // MARK: Lifecycle
 
@@ -22,13 +25,15 @@ public struct WebInspectCropInputView: View {
     elementCount: Int = 0,
     onSubmit: @escaping (String) -> Void,
     onSubmitAndSend: ((String) -> Void)? = nil,
-    onDismiss: @escaping () -> Void
+    onDismiss: @escaping () -> Void,
+    @ViewBuilder leadingAccessory: @escaping (String) -> LeadingAccessory
   ) {
     self.cropRect = cropRect
     self.elementCount = elementCount
     self.onSubmit = onSubmit
     self.onSubmitAndSend = onSubmitAndSend
     self.onDismiss = onDismiss
+    self.leadingAccessory = leadingAccessory
   }
 
   // MARK: Internal
@@ -38,6 +43,7 @@ public struct WebInspectCropInputView: View {
   let onSubmit: (String) -> Void
   let onSubmitAndSend: ((String) -> Void)?
   let onDismiss: () -> Void
+  let leadingAccessory: (String) -> LeadingAccessory
 
   public var body: some View {
     VStack(alignment: .leading, spacing: 8) {
@@ -100,6 +106,7 @@ public struct WebInspectCropInputView: View {
 
   private var inputRow: some View {
     HStack(alignment: .bottom, spacing: 8) {
+      leadingAccessory(trimmedText)
       textEditorView
       queueButton
       if onSubmitAndSend != nil {
@@ -176,13 +183,17 @@ public struct WebInspectCropInputView: View {
     .help("Send now (Command-Return)")
   }
 
+  private var trimmedText: String {
+    text.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
   private var isTextEmpty: Bool {
-    text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    trimmedText.isEmpty
   }
 
   private func submitMessage() {
     guard !isTextEmpty else { return }
-    let instruction = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    let instruction = trimmedText
     text = ""
     onSubmit(instruction)
   }
@@ -193,7 +204,7 @@ public struct WebInspectCropInputView: View {
       submitMessage()
       return
     }
-    let instruction = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    let instruction = trimmedText
     text = ""
     onSubmitAndSend(instruction)
   }
@@ -226,5 +237,28 @@ public struct WebInspectCropInputView: View {
       guard !Task.isCancelled else { return }
       isFocused = true
     }
+  }
+}
+
+// MARK: - Accessory-less Initializer
+
+public extension WebInspectCropInputView where LeadingAccessory == EmptyView {
+  /// Creates the editor without a leading accessory. Layout is identical to
+  /// the pre-accessory editor.
+  init(
+    cropRect: CGRect,
+    elementCount: Int = 0,
+    onSubmit: @escaping (String) -> Void,
+    onSubmitAndSend: ((String) -> Void)? = nil,
+    onDismiss: @escaping () -> Void
+  ) {
+    self.init(
+      cropRect: cropRect,
+      elementCount: elementCount,
+      onSubmit: onSubmit,
+      onSubmitAndSend: onSubmitAndSend,
+      onDismiss: onDismiss,
+      leadingAccessory: { _ in EmptyView() }
+    )
   }
 }

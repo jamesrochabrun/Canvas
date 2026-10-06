@@ -25,7 +25,7 @@ import SwiftUI
 ///     // send prompt to your agent
 ///   }
 /// ```
-struct WebInspectorOverlayModifier: ViewModifier {
+struct WebInspectorOverlayModifier<InputAccessory: View>: ViewModifier {
   @Bindable var state: ElementInspectState
   let inputPlacement: WebInspectInputPlacement
   let onSubmit: ((ElementInspectorData, String) -> Void)?
@@ -35,6 +35,7 @@ struct WebInspectorOverlayModifier: ViewModifier {
   let onCropSubmitAndSend: ((CGRect, [ElementInspectorData], String) -> Void)?
   let onOverlayHoverChange: ((Bool) -> Void)?
   let deactivateOnSubmit: Bool
+  let inputAccessory: (WebInspectInputAccessoryContext) -> InputAccessory
 
   private var bannerHidden: Bool {
     state.isInputShowing || state.isCropInputShowing
@@ -97,7 +98,8 @@ struct WebInspectorOverlayModifier: ViewModifier {
           state: state,
           onSubmit: onCropSubmit,
           onSubmitAndSend: onCropSubmitAndSend,
-          deactivateOnSubmit: deactivateOnSubmit
+          deactivateOnSubmit: deactivateOnSubmit,
+          inputAccessory: inputAccessory
         )
         .opacity(state.isReloading ? 0 : 1)
         .transition(.opacity.combined(with: .move(edge: .bottom)))
@@ -113,7 +115,8 @@ struct WebInspectorOverlayModifier: ViewModifier {
               placement: inputPlacement,
               onSubmit: onSubmit,
               onSubmitAndSend: onSubmitAndSend,
-              deactivateOnSubmit: deactivateOnSubmit
+              deactivateOnSubmit: deactivateOnSubmit,
+              inputAccessory: inputAccessory
             )
 
           case .context:
@@ -174,6 +177,51 @@ public extension View {
     onOverlayHoverChange: ((Bool) -> Void)? = nil,
     deactivateOnSubmit: Bool = true
   ) -> some View {
+    webInspectorOverlay(
+      state: state,
+      inputPlacement: inputPlacement,
+      onSubmit: onSubmit,
+      onSubmitAndSend: onSubmitAndSend,
+      onContextSelection: onContextSelection,
+      onCropSubmit: onCropSubmit,
+      onCropSubmitAndSend: onCropSubmitAndSend,
+      onOverlayHoverChange: onOverlayHoverChange,
+      deactivateOnSubmit: deactivateOnSubmit,
+      inputAccessory: { _ in EmptyView() }
+    )
+  }
+
+  /// Adds the web element inspector overlay with a host-provided input accessory.
+  ///
+  /// The accessory is rendered as a leading slot before the text field in both the
+  /// inspect input editor and the crop editor. Canvas stays unaware of what the host
+  /// puts there: the builder receives a `WebInspectInputAccessoryContext` describing
+  /// the current selection and draft text, and the host can close the editor via
+  /// `context.dismiss()`, which honors `deactivateOnSubmit` the same way a submit does.
+  ///
+  /// - Parameters:
+  ///   - state: The shared `ElementInspectState` controlling the inspector lifecycle.
+  ///   - inputPlacement: Controls where the inspect input editor is placed in input mode.
+  ///   - onSubmit: Called with the selected element and the user's instruction when they press Enter (input mode).
+  ///   - onSubmitAndSend: Called with the selected element and the user's instruction when they press Command-Return (input mode).
+  ///   - onContextSelection: Called with the selected element immediately on click (context mode).
+  ///   - onCropSubmit: Called with the crop rect, captured elements, and the user's instruction when they press Enter (crop mode).
+  ///   - onCropSubmitAndSend: Called with the crop rect, captured elements, and the user's instruction when they press Command-Return (crop mode).
+  ///   - onOverlayHoverChange: Called when the pointer enters or exits the inspector overlay chrome.
+  ///   - deactivateOnSubmit: Whether input and crop submissions (and `dismiss()` from the accessory) deactivate inspect mode.
+  ///   - inputAccessory: Builds the leading accessory shown before the text field in the input and crop editors.
+  func webInspectorOverlay<InputAccessory: View>(
+    state: ElementInspectState,
+    inputPlacement: WebInspectInputPlacement = .bottom,
+    onSubmit: ((ElementInspectorData, String) -> Void)? = nil,
+    onSubmitAndSend: ((ElementInspectorData, String) -> Void)? = nil,
+    onContextSelection: ((ElementInspectorData) -> Void)? = nil,
+    onCropSubmit: ((CGRect, [ElementInspectorData], String) -> Void)? = nil,
+    onCropSubmitAndSend: ((CGRect, [ElementInspectorData], String) -> Void)? = nil,
+    onOverlayHoverChange: ((Bool) -> Void)? = nil,
+    deactivateOnSubmit: Bool = true,
+    @ViewBuilder inputAccessory: @escaping (WebInspectInputAccessoryContext) -> InputAccessory
+  ) -> some View {
     modifier(WebInspectorOverlayModifier(
       state: state,
       inputPlacement: inputPlacement,
@@ -183,7 +231,8 @@ public extension View {
       onCropSubmit: onCropSubmit,
       onCropSubmitAndSend: onCropSubmitAndSend,
       onOverlayHoverChange: onOverlayHoverChange,
-      deactivateOnSubmit: deactivateOnSubmit
+      deactivateOnSubmit: deactivateOnSubmit,
+      inputAccessory: inputAccessory
     ))
   }
 }

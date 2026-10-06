@@ -7,16 +7,17 @@
 
 import SwiftUI
 
-struct WebInspectInputOverlay: View {
+struct WebInspectInputOverlay<InputAccessory: View>: View {
   @Bindable var state: ElementInspectState
   let placement: WebInspectInputPlacement
   let onSubmit: ((ElementInspectorData, String) -> Void)?
   let onSubmitAndSend: ((ElementInspectorData, String) -> Void)?
   let deactivateOnSubmit: Bool
+  let inputAccessory: (WebInspectInputAccessoryContext) -> InputAccessory
 
   @State private var measuredHeight: CGFloat = Self.defaultHeight
 
-  private static let defaultHeight: CGFloat = 120
+  private static var defaultHeight: CGFloat { 120 }
   private let contentInset: CGFloat = 12
   private let gap: CGFloat = 12
 
@@ -83,6 +84,15 @@ struct WebInspectInputOverlay: View {
       },
       onDismiss: {
         state.dismissInput()
+      },
+      leadingAccessory: { draftText in
+        if let context = WebInspectInputAccessoryContext.forInput(
+          state: state,
+          draftText: draftText,
+          deactivateOnSubmit: deactivateOnSubmit
+        ) {
+          inputAccessory(context)
+        }
       }
     )
     .background {

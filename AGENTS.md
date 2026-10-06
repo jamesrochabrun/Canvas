@@ -60,6 +60,7 @@ On scroll after crop: JS tracks document-relative coordinates and posts `cropRec
 - **Parsing** goes in `ElementInspectorBridge.parseElementData()` / `parseCropData()`.
 - **UI** goes in `WebInspectInputView`, `WebInspectContextView`, `WebInspectCropInputView`, or `WebInspectorOverlay`.
 - **Crop input positioning** goes in `WebInspectCropInputOverlay` (uses `WebInspectInputLayoutResolver`).
+- **Input accessory context** goes in `WebInspectInputAccessoryContext` (selection + draft text + `dismiss()` handed to the host's accessory builder).
 - **Prompt formatting** goes in `ElementInspectorPromptBuilder`.
 - **Typed computed style access** goes in `ElementComputedStyleSnapshot`.
 - **Parent layout context** goes in `ParentLayoutContext`.
@@ -141,6 +142,7 @@ Errors: `SnapshotError.zeroRect`, `.rectOutOfBounds`, `.snapshotFailed(String)`.
 - Add `Co-Authored-By` lines to commits.
 - Create documentation files (README updates, etc.) unless explicitly asked.
 - Over-engineer: no abstractions for one-time operations, no speculative features.
+- Put host-specific actions inside the input views. The input accessory slot exists so hosts provide their own controls; Canvas only hands over the selection via `WebInspectInputAccessoryContext`.
 
 ## Verification Checklist
 
