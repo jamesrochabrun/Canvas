@@ -148,6 +148,42 @@ inspectState.activate(mode: .crop)
 
 When no leaf elements pass the overlap threshold (e.g., cropping empty spacing), Canvas falls back to the tightest ancestor containing the crop rect.
 
+## Input Accessory
+
+The inspect input and crop editors accept an optional leading slot before the text field. A host app fills it with its own control — for example a menu of actions that run against the current selection — as an alternative to typing an instruction and pressing Queue or Send. Canvas stays unaware of what the host puts there: it only hands over the selection and lets the host close the editor.
+
+Pass an `inputAccessory` view builder to `webInspectorOverlay`. The builder receives a `WebInspectInputAccessoryContext`:
+
+| Member | Meaning |
+|--------|---------|
+| `selection` | `.element(ElementInspectorData)` in input mode, or `.crop(rect:elements:)` in crop mode |
+| `draftText` | The instruction typed so far, trimmed. Empty when nothing has been typed |
+| `dismiss()` | Closes the editor the same way a submit does, honoring `deactivateOnSubmit` |
+
+```swift
+.webInspectorOverlay(
+  state: inspectState,
+  onSubmit: { element, instruction in
+    sendToAgent(element, instruction)
+  },
+  inputAccessory: { context in
+    Menu("Actions") {
+      Button("Summarize selection") {
+        switch context.selection {
+        case .element(let element):
+          summarize([element], note: context.draftText)
+        case .crop(_, let elements):
+          summarize(elements, note: context.draftText)
+        }
+        context.dismiss()
+      }
+    }
+  }
+)
+```
+
+A control that consumes the selection should call `dismiss()` so the editor closes and inspect mode ends or stays active exactly as it would after Enter. Omit `inputAccessory` and the editors look and behave as before.
+
 ## Content-Frame (iframe) Inspection
 
 Some pages are only a shell around a same-origin `<iframe>` that hosts the real content. Canvas detects such frames automatically and targets inspection (hover highlight, click capture, crop, `scrollToAndSelect`, design edits) at the iframe's document instead of the shell.
@@ -311,6 +347,7 @@ case .deleteElement:
 | `ElementComputedStyleSnapshot` | Typed accessors over `computedStyles` |
 | `CSSBoxEdges` | Per-side box-model values with synthesized shorthand |
 | `ParentLayoutContext` | Typed layout context derived from the parent element |
+| `WebInspectInputAccessoryContext` | Selection, draft text, and `dismiss()` handed to the host's input accessory |
 | `ElementInspectorPromptBuilder` | Builds structured prompt/context text |
 | `ElementSnapshotCapture` | Cropped element screenshot capture |
 | `DesignToolbarValues` | Observable toolbar state initialized from element styles |

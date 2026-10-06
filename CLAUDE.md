@@ -28,6 +28,7 @@ Sources/Canvas/
   WebInspectContextView.swift         — Read-only element summary (context mode)
   WebInspectCropInputView.swift       — Floating text-input overlay (crop mode)
   WebInspectCropInputOverlay.swift    — Crop input positioning (anchored below crop rect)
+  WebInspectInputAccessoryContext.swift — Selection + draft text + dismiss() for the host's input accessory
   WebInspectInputLayoutResolver.swift — Pure layout logic for anchoring input to element/crop rect
   WebInspectorOverlay.swift           — ViewModifier combining banner + overlays
   ElementInspectorPromptBuilder.swift — Structured prompt construction
@@ -43,6 +44,7 @@ Sources/Canvas/
 - Value types for data (`ElementInspectorData`), reference types for state (`ElementInspectState`)
 - `WeakScriptMessageHandler` proxy to avoid WKWebView retain cycles
 - Coordinator pattern for `NSViewRepresentable` lifecycle
+- Host-specific actions stay out of the input views: the inspect/crop editors expose a generic leading accessory slot (`inputAccessory` on `webInspectorOverlay`), and hosts receive the selection via `WebInspectInputAccessoryContext`
 
 ## Inspector Capture Levels
 
